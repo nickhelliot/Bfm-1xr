@@ -8,7 +8,8 @@
  *   FX              mutate the sound a little
  *   SELECT          scroll the list of 32 parameters; K1 .. K4 change the four marked rows
  *   ALGO            the wave
- *   PLAY, the keys  play it (C4 at the sound's own pitch, the other keys transpose it); OCT- / OCT+ the octave
+ *   PLAY, the keys  play it (C4 at the sound's own pitch, the other keys transpose it; keys: up to 4 at once);
+ *                   OCT- / OCT+ the octave
  *   SAVE            keep the sound (it is back at the next power-on); MASTER the volume
  *   SAVE + a white key   store the sound in that slot (16 slots, one a white key)
  *   SEL + a white key    recall the slot's sound and play it
@@ -48,62 +49,121 @@ typedef struct {
 static bank_t bank;
 
 /* ------------------------------------------------------------------ sound --- */
-/* the main loop asks for a sound (the parameters in set.p, a pitch); the audio interrupt starts it */
-static bfxr_voice_t bx_voice;
-static float bx_buf[APP_BLOCK];
-static volatile uint32_t trig_seq, trig_done;
-static volatile float trig_pitch = 1.0f;
-static volatile int32_t bx_playing;
+/* NVOICES sounds at once: a key or a MIDI note each its own (a chord), the oldest cut when all play. PLAY, EDIT, FX,
+ * PRESET and a change's preview stop the others first, as bfxr.net plays one sound at a time. The main loop asks
+ * through a ring (it writes, the audio interrupt reads); MIDI notes start in the interrupt itself. Each block the
+ * render times itself: past BX_LOAD_MAX of the block's time it cuts its oldest sound (heavy chords: TAN with
+ * HARMONICS), so the audio never runs late. */
+#define NVOICES 4u
+#define BX_LOAD_MAX 70u                          /* % of a block's time */
+static bfxr_voice_t bx_voice[NVOICES];
+static uint32_t bx_age[NVOICES], bx_clock;
+static float bx_buf[APP_BLOCK], bx_one[APP_BLOCK];
+typedef struct { float pitch; uint8_t mono; } bx_req_t;
+static bx_req_t bx_ring[8];
+static volatile uint32_t bx_head, bx_tail;       /* main loop writes head, the audio interrupt tail */
+static volatile int32_t bx_playing;              /* sounds playing now */
+static volatile uint32_t bx_load, bx_cuts;       /* the last block's time in %, the sounds cut for time */
 static uint32_t bx_seed = 0x2545F491u;
 static float bx_gain;
 
-static void play_semitones(int32_t st)
+static void play_semitones_mode(int32_t st, int mono)
 {
-    trig_pitch = fm_exp2f((float)st / 12.0f);
-    trig_seq++;
+    uint32_t h = bx_head;
+    if (h - bx_tail >= 8u)
+        return;                                  /* (eight asked in one block: the rest are dropped) */
+    bx_ring[h & 7u].pitch = fm_exp2f((float)st / 12.0f);
+    bx_ring[h & 7u].mono = (uint8_t)mono;
+    bx_head = h + 1u;
+}
+static void play_semitones(int32_t st) { play_semitones_mode(st, 0); }   /* a key: beside what plays */
+
+static void voice_start(float pitch, int mono)   /* audio interrupt */
+{
+    uint32_t i, pick = 0, k;
+    bfxr_sound_t s;
+    if (mono)
+        for (i = 0; i < NVOICES; i++)
+            bx_voice[i].active = 0;
+    for (i = 0; i < NVOICES; i++) {              /* a free voice, else the oldest */
+        if (!bx_voice[i].active) {
+            pick = i;
+            break;
+        }
+        if (bx_age[i] < bx_age[pick])
+            pick = i;
+    }
+    for (k = 0; k < BP_COUNT; k++)
+        s.p[k] = set.p[k];
+    bx_seed = bx_seed * 1664525u + 1013904223u;
+    bfxr_start(&bx_voice[pick], &s, pitch, bx_seed);
+    bx_age[pick] = ++bx_clock;
 }
 
-static void midi_in(void)                /* audio interrupt: notes from USB / TRS play the sound */
+static void midi_in(void)                /* audio interrupt: notes from USB / TRS play the sound, a chord too */
 {
     uint32_t pkt;
     int port;
     while (plat_midi_in(&pkt, &port)) {
         uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = pkt >> 24;
         if ((st & 0xF0u) == 0x90u && d2)
-            play_semitones((int32_t)d1 - 60);
+            voice_start(fm_exp2f((float)((int32_t)d1 - 60) / 12.0f), 0);
     }
 }
 
 void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
-    uint32_t i;
+    uint32_t i, v, t0 = plat_ticks24(), dt, budget;
+    int32_t playing = 0;
     float gain = (float)master_q12 / 4096.0f * 8000000.0f;   /* 1.0 is near full scale, as in a browser */
     midi_in();
-    if (trig_seq != trig_done) {
-        bfxr_sound_t s;
-        trig_done = trig_seq;
-        for (i = 0; i < BP_COUNT; i++)
-            s.p[i] = set.p[i];
-        bx_seed = bx_seed * 1664525u + 1013904223u;
-        bfxr_start(&bx_voice, &s, trig_pitch, bx_seed);
+    while (bx_tail != bx_head) {
+        bx_req_t r = bx_ring[bx_tail & 7u];
+        voice_start(r.pitch, r.mono);
+        bx_tail = bx_tail + 1u;
     }
     if (n > APP_BLOCK)
         n = APP_BLOCK;
-    bfxr_render(&bx_voice, bx_buf, n);
-    bx_playing = bx_voice.active;
-    for (i = 0; i < n; i++) {
-        int32_t s;
-        bx_gain += (gain - bx_gain) * 0.004f;              /* ~5 ms: turning MASTER does not click */
-        s = (int32_t)(bx_buf[i] * bx_gain);
-        lr[2 * i] = s;
-        lr[2 * i + 1] = s;
+    for (i = 0; i < n; i++)
+        bx_buf[i] = 0;
+    for (v = 0; v < NVOICES; v++) {
+        if (!bx_voice[v].active)
+            continue;
+        bfxr_render(&bx_voice[v], bx_one, n);
+        for (i = 0; i < n; i++)
+            bx_buf[i] += bx_one[i];
+        playing += bx_voice[v].active;
     }
+    for (i = 0; i < n; i++) {
+        float s;
+        bx_gain += (gain - bx_gain) * 0.004f;              /* ~5 ms: turning MASTER does not click */
+        s = fm_clampf(bx_buf[i], -1.0f, 1.0f) * bx_gain;   /* (a chord can add up past full scale) */
+        lr[2 * i] = (int32_t)s;
+        lr[2 * i + 1] = (int32_t)s;
+    }
+    dt = plat_ticks24() - t0;
+    budget = n * (PLAT_TICKS_PER_US * 1000000u / 44100u);   /* the block's time, in ticks */
+    bx_load = budget ? dt * 100u / budget : 0;
+    if (bx_load > BX_LOAD_MAX && playing > 1) {  /* too slow: the oldest sound goes */
+        uint32_t old = NVOICES;
+        for (v = 0; v < NVOICES; v++)
+            if (bx_voice[v].active && (old == NVOICES || bx_age[v] < bx_age[old]))
+                old = v;
+        if (old < NVOICES) {
+            bx_voice[old].active = 0;
+            playing--;
+            bx_cuts++;
+        }
+    }
+    bx_playing = playing;
 }
 
 void app_panic(void)
 {
-    bx_voice.active = 0;
-    trig_done = trig_seq;
+    uint32_t v;
+    for (v = 0; v < NVOICES; v++)
+        bx_voice[v].active = 0;
+    bx_tail = bx_head;
 }
 
 /* --------------------------------------------------------------- settings --- */
@@ -235,7 +295,7 @@ static void say_param(uint32_t k)
     app_say(BFXR_PARAMS[k].label, t);
 }
 
-static void play_now(void) { play_semitones(12 * set.octave); }
+static void play_now(void) { play_semitones_mode(12 * set.octave, 1); }   /* one sound, as bfxr.net */
 
 static void generate(uint32_t gen)
 {
@@ -710,8 +770,10 @@ int app_expect(const char *what, int *got)
         *got = set.sel;
     else if (!strcmp(what, "dirty"))
         *got = set_dirty;
-    else if (!strcmp(what, "playing"))
+    else if (!strcmp(what, "playing"))           /* sounds playing now */
         *got = bx_playing;
+    else if (!strcmp(what, "cuts"))              /* sounds cut for time */
+        *got = (int)bx_cuts;
     else if (!strcmp(what, "slots"))            /* the slots holding a sound, a bit each */
         *got = (int)bank.used;
     else if (!strcmp(what, "slot"))

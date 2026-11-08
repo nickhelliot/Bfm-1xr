@@ -42,7 +42,7 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 | **K1 to K4** | Change the four highlighted rows. Turn slowly for fine steps (1 % of the range), fast for bigger ones |
 | **ALGO** | Changes the wave, from anywhere in the list |
 | **PLAY** | Plays the sound |
-| **Keys** | Play the sound at a pitch. **C4** (the 5th white key from the left) plays it as made; the others transpose it |
+| **Keys** | Play the sound at a pitch. **C4** (the 5th white key from the left) plays it as made; the others transpose it. Press several for a chord: up to 4 sounds at once |
 | **OCT− / OCT+** | Shift the keys and PLAY down or up an octave (−2 to +2) |
 | **HOME** | Jumps back to the top of the list |
 | **SAVE** (tap) | Keeps the sound: it's there again the next time you switch on. SAVE is lit while there's something unsaved |
@@ -52,7 +52,12 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 
 After you change a value, the sound plays once you stop turning, as bfxr.net plays when you let go of a slider.
 
-**MIDI:** notes from USB play the sound (middle C at its own pitch), and the keys send notes out over USB.
+**Chords:** each key starts its own copy of the sound, so you can play up to 4 at once; a fifth key cuts the oldest.
+PLAY, EDIT, FX, PRESET and the play-after-change stop what's playing first and play one sound, as bfxr.net does.
+If a chord of very heavy sounds (lots of HARMONICS, or TAN) is more than the FM-1 can compute in time, it drops the
+oldest sound rather than letting the audio crackle.
+
+**MIDI:** notes from USB play the sound (middle C at its own pitch), chords too, and the keys send notes out over USB.
 
 ## Making a sound
 

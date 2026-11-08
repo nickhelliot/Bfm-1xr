@@ -143,3 +143,35 @@ expect slots 1
 reboot
 wait 600
 expect slots 1
+
+# --- chords: a key each its own sound (4 at most); PLAY one sound, as bfxr.net
+sysex F0 7D 42 46 04 10 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+wait 50
+key 7 down
+key 11 down
+key 14 down
+wait 50
+# (the sound sent over USB plays once as it arrives: it and the three keys)
+expect playing 4
+wav chord.wav
+wait 400
+wavstop
+expect peak_db_min -30
+key 7 up
+key 11 up
+key 14 up
+key 0 down
+key 2 down
+wait 50
+expect playing 4
+key 0 up
+key 2 up
+tap PLAY
+wait 50
+expect playing 1
+midi 90 3C 64
+midi 90 40 64
+midi 90 43 64
+wait 50
+expect playing 4
+expect cuts 0
