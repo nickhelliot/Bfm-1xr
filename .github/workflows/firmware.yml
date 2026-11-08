@@ -1,0 +1,35 @@
+# Builds the firmware (app/build/bfxr.fwsc) on GitHub with the shared FM-1 builder, which installs JieLi's toolchain and
+# SDK. Every push builds it (the package is in the run's "packages" artifact); a tag vX.Y publishes it as a release.
+name: Build firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+    tags: ['v[0-9]*']
+
+permissions: {}
+
+jobs:
+  firmware:
+    uses: zvenson/fm1-build/.github/workflows/build.yml@v1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      sdk: true
+      build: |
+        set -euo pipefail
+        git submodule update --init --recursive
+        sudo apt-get install -y -qq libfribidi0
+        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then ./build.sh --release "${GITHUB_REF_NAME#v}"; else ./build.sh; fi
+      test: |
+        set -euo pipefail
+        ./build.sh --host
+        app/build/host/bfxr_host app/tests/basic.txt app/build/host
+        git clone -q --depth 1 https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
+        node tools/gen_ref.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/ref"
+        cc -O2 -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
+        "$RUNNER_TEMP/check_engine" "$RUNNER_TEMP/ref" || true   # (two TAN cases differ by design: see the file)
+      packages: app/build/bfxr*.fwsc

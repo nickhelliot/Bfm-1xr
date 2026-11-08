@@ -1,0 +1,76 @@
+# BFXR in the host simulator: base/tools/build.py app --host, then
+#   app/build/host/bfxr_host app/tests/basic.txt app/build/host
+wait 600
+shot boot.png
+expect gen 0
+# PLAY plays the sound, and it ends by itself
+tap PLAY
+wait 50
+expect playing 1
+wav coin.wav
+wait 900
+wavstop
+expect peak_db_min -40
+wait 2000
+expect playing 0
+# PRESET: the next kind of sound, made and played
+turn PRESET 1
+wait 50
+expect gen 1
+expect playing 1
+expect dirty 1
+shot laser.png
+turn PRESET 1
+wait 30
+expect gen 2
+wav explosion.wav
+wait 600
+wavstop
+expect peak_db_min -40
+# a key plays it too; C4 is key 7
+wait 3000
+key 7 down
+wait 30
+expect playing 1
+key 7 up
+# SELECT scrolls; K1 changes the first marked row
+turn SELECT 7
+wait 30
+expect sel 7
+# (turned all the way down, it stops at 0; one detent is 1 % of the range)
+turn K1 -40
+wait 30
+expect p7 0
+turn K1 1
+wait 30
+expect p7 1
+turn K1 1
+wait 30
+expect p7 2
+# back to the top: K2 is now on the WAVE row; ALGO changes the wave too
+turn SELECT -7
+wait 30
+expect sel 0
+turn ALGO 1
+wait 400
+expect playing 1
+shot edit.png
+# FX mutates; EDIT makes another of the same kind
+tap FX
+wait 30
+tap EDIT
+wait 30
+expect gen 2
+# SAVE keeps it across a power cycle
+turn PRESET 3
+wait 30
+expect gen 5
+tap SAVE
+wait 30
+expect dirty 0
+reboot
+wait 600
+expect gen 5
+tap OCT+
+wait 30
+expect octave 1
