@@ -33,3 +33,51 @@ jobs:
         cc -O2 -ffp-contract=off -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
         "$RUNNER_TEMP/check_engine" "$RUNNER_TEMP/ref" || true   # (two TAN cases differ by design: see the file)
       packages: app/build/bfxr*.fwsc
+
+  # On a tag: the site with the web installer and the in-browser emulator, on GitHub Pages
+  # (Settings > Pages > Source: GitHub Actions). https://nickhelliot.github.io/Bfm-1xr/
+  site:
+    needs: firmware
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python packages and FriBiDi (the fonts)
+        run: |
+          python3 -m pip install Pillow
+          sudo apt-get install -y -qq libfribidi0
+      - name: Emscripten 6.0.10 (the emulator)
+        run: |
+          git clone -q https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          git -C "$RUNNER_TEMP/emsdk" checkout -q a2b92777574c2feda07994cd4f1079a3dfc151f8
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.10
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.10
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dl
+      - name: The site
+        run: |
+          set -euo pipefail
+          set +u; source "$RUNNER_TEMP/emsdk/emsdk_env.sh"; set -u
+          version=${GITHUB_REF_NAME#v}
+          ./build.sh --web
+          python3 base/tools/make_site.py app "dl/app/build/bfxr-$version.fwsc" "$version" _site
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

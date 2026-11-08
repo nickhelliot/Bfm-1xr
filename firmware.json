@@ -7,7 +7,10 @@
   "tagline": "bfxr.net's sound effects on the FM-1",
   "description": "Make bfxr.net's game sound effects on the FM-1: pick a kind of sound (coin, laser, explosion, powerup, hit, jump, blip, random), mutate it, edit all 32 of bfxr's parameters, and play it from the keys.",
   "tags": ["synth"],
+  "install": "https://nickhelliot.github.io/Bfm-1xr/install/",
+  "site": "https://nickhelliot.github.io/Bfm-1xr/",
   "source": "https://github.com/nickhelliot/Bfm-1xr",
+  "screenshot": "docs/screen.png",
   "hardware": {
     "models": ["FM-1"],
     "flash": ["856014", "B36014"],

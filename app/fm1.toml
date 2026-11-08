@@ -14,3 +14,6 @@ credits = "The sound engine and generators are bfxr2 by Stephen Lavelle (MIT), f
 author = "Elliot"
 description = "Make bfxr.net's game sound effects on the FM-1: pick a kind of sound (coin, laser, explosion, powerup, hit, jump, blip, random), mutate it, edit all 32 of bfxr's parameters, and play it from the keys."
 tags = ["synth"]
+install = "https://nickhelliot.github.io/Bfm-1xr/install/"
+site = "https://nickhelliot.github.io/Bfm-1xr/"
+screenshot = "docs/screen.png"   # a square PNG of the screen (the simulator's)
