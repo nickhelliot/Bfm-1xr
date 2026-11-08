@@ -1,4 +1,4 @@
-# Builds the firmware (app/build/bfxr.fwsc) on GitHub with the shared FM-1 builder, which installs JieLi's toolchain and
+# Builds the firmware (app/build/bfmxr.fwsc) on GitHub with the shared FM-1 builder, which installs JieLi's toolchain and
 # SDK. Every push builds it (the package is in the run's "packages" artifact); a tag vX.Y publishes it as a release.
 name: Build firmware
 
@@ -27,13 +27,13 @@ jobs:
       test: |
         set -euo pipefail
         ./build.sh --host
-        app/build/host/bfxr_host app/tests/basic.txt app/build/host
+        app/build/host/bfmxr_host app/tests/basic.txt app/build/host
         git clone -q --depth 1 https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
         node tools/gen_ref.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/ref"
         cc -O2 -ffp-contract=off -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
         "$RUNNER_TEMP/check_engine" "$RUNNER_TEMP/ref" || true   # (two TAN cases differ by design: see the file)
         node tools/library_test.mjs "$RUNNER_TEMP/bfxr2"
-      packages: app/build/bfxr*.fwsc
+      packages: app/build/bfmxr*.fwsc
 
   # The site with the web installer and the in-browser emulator, on GitHub Pages (Settings > Pages > Source: GitHub
   # Actions), from this branch: https://nickhelliot.github.io/Bfm-1xr/
@@ -76,7 +76,7 @@ jobs:
           set +u; source "$RUNNER_TEMP/emsdk/emsdk_env.sh"; set -u
           version=$(cat app/VERSION)
           ./build.sh --web
-          python3 base/tools/make_site.py app "dl/app/build/bfxr-$version.fwsc" "$version" _site
+          python3 base/tools/make_site.py app "dl/app/build/bfmxr-$version.fwsc" "$version" _site
           # the Library page, with bfxr2's library (MIT) at a fixed commit to play and render the sounds
           mkdir -p _site/library
           cp web/library/index.html _site/library/

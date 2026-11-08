@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * BFXR for the FM-1: bfxr2's classic Bfxr engine (js/audio/Bfxr_DSP.js) played sample by sample, and its sound
+ * BFMXR for the FM-1: bfxr2's classic Bfxr engine (js/audio/Bfxr_DSP.js) played sample by sample, and its sound
  * generators (js/synths/Bfxr.js). Line for line with the JavaScript, quirks included; see bfxr.h for the credits.
  * Checked against the JavaScript's output on a computer: tools/check_engine.c. */
 #include "bfxr.h"

@@ -35,8 +35,8 @@ try { P.fromBfxr(JSON.stringify({synth_type: 'Pluckr', params: {}})); } catch (e
 check(refused, 'another synth\'s file is refused');
 
 // 2. the FM-1: write it into slot 4 (index 3), list, clear slot 4 again in a second run
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bfxr-lib-'));
-const host = path.join(root, 'app/build/host/bfxr_host');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bfmxr-lib-'));
+const host = path.join(root, 'app/build/host/bfmxr_host');
 const log = path.join(tmp, 'sysex.bin');
 const script = ['wait 600', `sysex_log ${log}`, `sysex ${hex(P.writeRequest(3, values))}`, 'wait 50',
                 `sysex ${hex(P.listRequest())}`, 'wait 300', `sysex ${hex(P.clearRequest(3))}`, 'wait 50',
@@ -68,7 +68,7 @@ let maxd = 0;
 for (let i = 0; i < Math.min(a.length, b.length); i++) maxd = Math.max(maxd, Math.abs(a[i] - b[i]));
 check(Math.abs(a.length - b.length) <= 64 && maxd < 0.02, `the .bfxr renders as the original (length ${b.length} vs ${a.length}, ` +
       `largest difference ${maxd.toFixed(4)})`);
-check(JSON.parse(out).synth_type === 'Bfxr' && P.slotName(3) === 'bfxr-slot-04', 'the .bfxr file: Bfxr, named for its slot');
+check(JSON.parse(out).synth_type === 'Bfxr' && P.slotName(3) === 'bfmxr-slot-04', 'the .bfxr file: Bfxr, named for its slot');
 const wav = P.wavBytes(b, 44100);
 check(String.fromCharCode(...wav.slice(0, 4)) === 'RIFF' && wav.length === 44 + 2 * b.length, 'the .wav: RIFF, 16-bit mono');
 const zip = P.zipBytes([['a.bfxr', new TextEncoder().encode(out)], ['a.wav', wav]]);

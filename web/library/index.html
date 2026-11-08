@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- SPDX-License-Identifier: MIT
-     BFXR's Library: the 16 sounds stored on an FM-1 running BFXR, read over USB (Web MIDI SysEx, app/app.c "the slots
+     BFMXR's Library: the 16 sounds stored on an FM-1 running BFMXR, read over USB (Web MIDI SysEx, app/app.c "the slots
      over USB"), played, saved as .bfxr (bfxr.net's file) and .wav, and .bfxr files sent back into the slots.
      The sounds are rendered by bfxr2's library (bfxrlib.min.js, MIT, Stephen Lavelle), copied beside this page by the
      build. The part between the "protocol" markers is what tools/library_test.mjs runs against the simulator. -->
@@ -8,7 +8,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Library · BFXR</title>
+<title>Library · BFMXR</title>
 <style>
 :root { --ground: #e7d1a7; --card: #f0e0bf; --ink: #1e100c; --muted: #6b4a3a; --bar: #5e3028; --rule: #ccbda1; --teal: #065456; }
 * { box-sizing: border-box; }
@@ -43,10 +43,10 @@ a { color: var(--bar); }
 </head>
 <body>
 <main>
-<h1>BFXR Library</h1>
+<h1>BFMXR Library</h1>
 <p class="lead">The 16 sounds on your FM-1: play them, save them to your computer as <b>.bfxr</b> (opens in
 <a href="https://www.bfxr.net">bfxr.net</a>) or <b>.wav</b>, and send .bfxr files back. Chrome or Edge, with the FM-1
-connected by USB and running BFXR.</p>
+connected by USB and running BFMXR.</p>
 
 <div class="bar">
   <button id="connect">Connect</button>
@@ -65,7 +65,7 @@ connected by USB and running BFXR.</p>
       bfxr.net's <b>Bfxr</b> sounds can be sent (not its other synths).</li>
     <li>The .wav files are rendered here by bfxr's own code, at 44.1 kHz.</li>
   </ul>
-  <p><a href="../">BFXR</a> · <a href="https://github.com/nickhelliot/Bfm-1xr">Source</a></p>
+  <p><a href="../">BFMXR</a> · <a href="https://github.com/nickhelliot/Bfm-1xr">Source</a></p>
 </div>
 </main>
 
@@ -112,7 +112,7 @@ const listRequest = () => [...HEAD, 0x01, 0xF7];
 const writeRequest = (slot, values) => [...HEAD, 0x04, slot, ...encodeSound(values), 0xF7];
 const clearRequest = slot => [...HEAD, 0x06, slot, 0xF7];
 // a frame from the FM-1 (F0 .. F7) -> {type: 'slot', slot, used, values} | {type: 'end', version, nslots} |
-// {type: 'reply', slot, status} | null (not BFXR's)
+// {type: 'reply', slot, status} | null (not BFMXR's)
 function parseFrame(d) {
   if (d.length < 6 || d[0] !== 0xF0 || d[d.length - 1] !== 0xF7) return null;
   for (let i = 0; i < 4; i++) if (d[i] !== HEAD[i]) return null;
@@ -186,7 +186,7 @@ function zipBytes(files) {
   for (const p of all) { out.set(p, o); o += p.length; }
   return out;
 }
-const slotName = slot => slot === CURRENT ? 'bfxr-current' : `bfxr-slot-${String(slot + 1).padStart(2, '0')}`;
+const slotName = slot => slot === CURRENT ? 'bfmxr-current' : `bfmxr-slot-${String(slot + 1).padStart(2, '0')}`;
 // --- end protocol ---
 
 const $ = id => document.getElementById(id);
@@ -213,13 +213,13 @@ function pickPorts() {
   const sel = $('port');
   sel.innerHTML = '';
   outs.forEach((o, i) => { const opt = document.createElement('option'); opt.value = i; opt.textContent = o.name; sel.appendChild(opt); });
-  const guess = outs.findIndex(o => /bfxr|fm-?1/i.test(o.name));
+  const guess = outs.findIndex(o => /bfm?xr|fm-?1/i.test(o.name));
   sel.value = String(guess >= 0 ? guess : 0);
   sel.hidden = outs.length < 2;
   const use = () => {
     output = outs[Number(sel.value)] || null;
     if (input) input.onmidimessage = null;
-    input = ins.find(i => output && i.name === output.name) || ins.find(i => /bfxr|fm-?1/i.test(i.name)) || ins[0] || null;
+    input = ins.find(i => output && i.name === output.name) || ins.find(i => /bfm?xr|fm-?1/i.test(i.name)) || ins[0] || null;
     if (input) input.onmidimessage = onMessage;
     $('read').disabled = !(input && output);
   };
@@ -244,7 +244,7 @@ function readAll() {
   if (!output) return;
   const got = [];
   status('Reading...');
-  const timer = setTimeout(() => { waiting = null; status('No answer: is the FM-1 running BFXR?', true); }, 4000);
+  const timer = setTimeout(() => { waiting = null; status('No answer: is the FM-1 running BFMXR?', true); }, 4000);
   waiting = f => {
     if (f.type === 'slot') got[f.slot] = f;
     if (f.type === 'end') {
@@ -326,7 +326,7 @@ $('all').onclick = () => {
     const name = slotName(slot);
     files.push([name + '.bfxr', new TextEncoder().encode(toBfxr(s.values, name))], [name + '.wav', wavOf(s.values)]);
   });
-  download('bfxr-sounds.zip', zipBytes(files), 'application/zip');
+  download('bfmxr-sounds.zip', zipBytes(files), 'application/zip');
 };
 
 if (!navigator.requestMIDIAccess) status('This page needs Web MIDI: open it in Chrome or Edge.', true);

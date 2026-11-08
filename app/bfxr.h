@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * BFXR for the FM-1: the classic Bfxr sound engine of bfxr2 (https://github.com/increpare/bfxr2, MIT, Copyright (c)
+ * BFMXR for the FM-1: the classic Bfxr sound engine of bfxr2 (https://github.com/increpare/bfxr2, MIT, Copyright (c)
  * 2021 Stephen Lavelle), itself from Thomas Vian's SfxrSynth (Apache-2.0, Copyright 2010 Thomas Vian), rewritten to
  * play sample by sample instead of into a buffer. The parameters, their ranges and the sound generators are bfxr2's. */
 #pragma once

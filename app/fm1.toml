@@ -1,8 +1,8 @@
-# BFXR's build settings (base/tools/build.py)
-name = "BFXR"                  # the build's files: app/build/bfxr.fwsc
+# BFMXR's build settings (base/tools/build.py)
+name = "BFMXR"                  # the build's files: app/build/bfmxr.fwsc
 id_prefix = "FM-1_62"          # package identity: dev FM-1_6200, releases FM-1_62XXYYZZ
-usb_manufacturer = "BFXR"
-usb_product = "BFXR FM-1"
+usb_manufacturer = "BFMXR"
+usb_product = "BFMXR FM-1"
 o2 = ["bfxr.c"]                # the sound engine, compiled at -O2
 words = "words.tsv"
 ble = false                    # no Bluetooth: USB MIDI only

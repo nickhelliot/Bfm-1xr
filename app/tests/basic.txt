@@ -1,5 +1,5 @@
-# BFXR in the host simulator: base/tools/build.py app --host, then
-#   app/build/host/bfxr_host app/tests/basic.txt app/build/host
+# BFMXR in the host simulator: base/tools/build.py app --host, then
+#   app/build/host/bfmxr_host app/tests/basic.txt app/build/host
 wait 600
 shot boot.png
 expect gen 0

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * BFXR for the FM-1: bfxr.net's sound maker on the keyboard. The engine and the generators are bfxr.c; this is the
+ * BFMXR for the FM-1: bfxr.net's sound maker on the keyboard. The engine and the generators are bfxr.c; this is the
  * screen, the controls and the sound's way out. Part of fm1-base's unity build (after the platform: gfx.c and
  * announce.c are in scope); bfxr.c is a separate unit at -O2 (fm1.toml o2).
  *

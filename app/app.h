@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: MIT
- * BFXR for the FM-1: bfxr.net's sound effects on the keyboard. The app's half of the contract with fm1-base
+ * BFMXR for the FM-1: bfxr.net's sound effects on the keyboard. The app's half of the contract with fm1-base
  * (base/device/unity.c, base/host/plat_host.c). */
 #pragma once
 #include <stdint.h>
 #include "plat.h"
 
-#define APP_NAME "BFXR"
+#define APP_NAME "BFMXR"
 #define APP_SPLASH_RGB RGB(94, 48, 40)
 #define APP_BLOCK 256u                   /* frames per audio block: 5.8 ms at 44.1 kHz */
 #define APP_CANVAS_PX (240u * 240u)      /* the whole screen drawn at once */

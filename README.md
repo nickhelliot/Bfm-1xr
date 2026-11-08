@@ -1,9 +1,9 @@
-# BFXR for the M-VAVE FM-1
+# BFMXR for the M-VAVE FM-1
 
-BFXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
+BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
 hits, jumps and blips, made the way bfxr.net makes them and played from the keys.
 
-![The BFXR screen](docs/screen.png)
+![The BFMXR screen](docs/screen.png)
 
 **[Install it](https://nickhelliot.github.io/Bfm-1xr/install/)** · **[Try it in your browser](https://nickhelliot.github.io/Bfm-1xr/emu/)** · **[Library: your sounds on your computer](https://nickhelliot.github.io/Bfm-1xr/library/)**
 
@@ -14,7 +14,7 @@ hits, jumps and blips, made the way bfxr.net makes them and played from the keys
 1. Connect the FM-1 to your computer by USB and switch it on.
 2. Open **https://nickhelliot.github.io/Bfm-1xr/install/** in Chrome or Edge. Allow MIDI access when the browser asks.
 3. Press **Connect**, then **Install**. Keep the cable in and the tab open until it says it's done. The FM-1 restarts
-   into BFXR: a cream screen with a maroon header.
+   into BFMXR: a cream screen with a maroon header.
 
 If an install is interrupted, plug the FM-1 back in and press **Install** again: it carries on where it stopped.
 
@@ -23,7 +23,7 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 
 ## The screen
 
-- **Header:** BFXR, the slot you last stored or recalled (SLOT 3), the kind of sound you last made, and **PLAYING**
+- **Header:** BFMXR, the slot you last stored or recalled (SLOT 3), the kind of sound you last made, and **PLAYING**
   while a sound plays.
 - **The list:** bfxr's 32 parameters, each with a bar and its value. The bar fills from the left for settings that
   go from 0 up, and from the middle for settings that go both ways (up or down, faster or slower).
@@ -72,7 +72,7 @@ oldest sound rather than letting the audio crackle.
 
 ## Storing sounds
 
-BFXR has 16 slots, one for each white key, from the lowest (slot 1) to the highest (slot 16). They're kept when you
+BFMXR has 16 slots, one for each white key, from the lowest (slot 1) to the highest (slot 16). They're kept when you
 switch off.
 
 - **Store:** hold **SAVE** and press a white key. The sound goes into that slot, replacing whatever was there.
@@ -88,7 +88,7 @@ switch off.
 
 The **[Library](https://nickhelliot.github.io/Bfm-1xr/library/)** page reads the slots from the FM-1 over USB.
 
-1. Connect the FM-1 by USB with BFXR running, open the Library in Chrome or Edge, and press **Connect** (allow MIDI
+1. Connect the FM-1 by USB with BFMXR running, open the Library in Chrome or Edge, and press **Connect** (allow MIDI
    and SysEx when the browser asks). It reads the slots at once; **Read sounds** reads them again.
 2. For each sound:
    - **Play** plays it on the computer.
@@ -155,7 +155,7 @@ The same as bfxr.net's sliders, in the same order. Values are bfxr's, from 0 to 
 ## If something goes wrong
 
 - **It won't start, or keeps restarting:** hold **OCT−** while switching on. The FM-1 starts in its USB updater, with
-  no sound, so you can install BFXR again or another firmware.
+  no sound, so you can install BFMXR again or another firmware.
 - **The installer or the Library can't find the FM-1:** use Chrome or Edge, allow MIDI access, and try another USB
   cable or port. Close other programs that use MIDI (DAWs, other installer or Library tabs). If you see a list of
   ports on the Library page, pick the FM-1's.
@@ -177,9 +177,9 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 [fm1-base](https://github.com/charlesvestal/fm1-base), then:
 
     git clone --recursive -b claude/bfxr-firmware https://github.com/nickhelliot/Bfm-1xr
-    ./build.sh                     # app/build/bfxr.fwsc
-    ./build.sh --host              # the simulator: app/build/host/bfxr_host app/tests/basic.txt app/build/host
-    python3 base/tools/fm1_install.py app/build/bfxr.fwsc
+    ./build.sh                     # app/build/bfmxr.fwsc
+    ./build.sh --host              # the simulator: app/build/host/bfmxr_host app/tests/basic.txt app/build/host
+    python3 base/tools/fm1_install.py app/build/bfmxr.fwsc
 
 | Where | What |
 | --- | --- |
@@ -199,5 +199,5 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 - Platform: [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal and
   [felucca-bsp](https://github.com/hugelton/felucca-bsp) by Leo Kuroshita (MPL-2.0), in `base/`
 
-BFXR's own files are MIT ([LICENSE](LICENSE)). M-VAVE and FM-1 are trademarks of their owners; BFXR is not affiliated
+BFMXR's own files are MIT ([LICENSE](LICENSE)). M-VAVE and FM-1 are trademarks of their owners; BFMXR is not affiliated
 with M-VAVE.
