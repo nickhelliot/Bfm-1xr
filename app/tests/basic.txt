@@ -1,6 +1,15 @@
 # BFMXR in the host simulator: base/tools/build.py app --host, then
 #   app/build/host/bfmxr_host app/tests/basic.txt app/build/host
-wait 600
+# the start-up animation plays with its sound, then the editor
+wait 300
+expect splash 1
+shot splash.png
+wav splash.wav
+wait 500
+wavstop
+expect peak_db_min -30
+wait 900
+expect splash 0
 shot boot.png
 expect gen 0
 # PLAY plays the sound, and it ends by itself
@@ -17,7 +26,6 @@ expect playing 0
 turn PRESET 1
 wait 50
 expect gen 1
-expect playing 1
 expect dirty 1
 shot laser.png
 turn PRESET 1
@@ -69,7 +77,8 @@ tap SAVE
 wait 30
 expect dirty 0
 reboot
-wait 600
+wait 1700
+expect splash 0
 expect gen 5
 tap OCT+
 wait 30
@@ -141,7 +150,8 @@ expect_sysex F0 7D 42 46 05 02 01 F7
 expect slots 1
 # the slots survive a power cycle
 reboot
-wait 600
+wait 1700
+expect splash 0
 expect slots 1
 
 # --- chords: a key each its own sound (4 at most); PLAY one sound, as bfxr.net
@@ -175,3 +185,95 @@ midi 90 43 64
 wait 50
 expect playing 4
 expect cuts 0
+# a key during the animation skips it, and plays nothing
+reboot
+wait 300
+expect splash 1
+key 7 down
+wait 50
+expect splash 0
+expect playing 0
+key 7 up
+wait 50
+key 7 down
+wait 50
+expect playing 1
+key 7 up
+# --- the GLO menu: SELECT a row, K1 / ALGO its value, GLO or HOME closes and keeps it
+wait 3000
+tap GLO
+wait 30
+expect menu 1
+shot menu.png
+# VOICES 1: one sound at a time, keys too
+turn SELECT 1
+turn K1 -3
+wait 30
+expect voices 1
+tap GLO
+wait 30
+expect menu 0
+key 7 down
+key 11 down
+wait 50
+expect playing 1
+key 7 up
+key 11 up
+# PLAY ON CHANGE off: a change is not heard
+tap GLO
+turn SELECT -1
+turn K1 1
+wait 30
+expect poc 0
+tap HOME
+wait 30
+expect menu 0
+wait 4000
+turn K1 1
+wait 500
+expect playing 0
+# MIDI IN on channel 2: channel 1 is not heard, channel 2 is
+tap GLO
+turn SELECT 4
+turn K1 2
+wait 30
+expect midich 2
+tap GLO
+wait 30
+midi 90 3C 64
+wait 50
+expect playing 0
+midi 91 3C 64
+wait 50
+expect playing 1
+# START-UP off: no animation after a restart; the settings are kept
+tap GLO
+turn SELECT -1
+turn ALGO -1
+wait 30
+expect startup 2
+tap GLO
+wait 30
+reboot
+wait 100
+expect splash 0
+expect voices 1
+expect poc 0
+expect midich 2
+# back to the defaults
+tap GLO
+turn SELECT -4
+turn K1 1
+turn SELECT 1
+turn K1 3
+turn SELECT 2
+turn K1 1
+turn SELECT 1
+turn K1 -2
+wait 30
+tap GLO
+wait 30
+expect poc 1
+expect voices 4
+expect startup 0
+expect midich 0

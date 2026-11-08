@@ -13,9 +13,11 @@
  *   SAVE            keep the sound (it is back at the next power-on); MASTER the volume
  *   SAVE + a white key   store the sound in that slot (16 slots, one a white key)
  *   SEL + a white key    recall the slot's sound and play it
+ *   GLO             the settings: play on change, voices, fast knobs, start-up, MIDI in channel
  * The slots go to and from a computer over USB SysEx (the site's Library page): see "the slots over USB" below. */
 #include "fastmath.h"
 #include "bfxr.h"
+#include "splash_data.h"                         /* the start-up animation and sound (tools/gen_splash.py) */
 
 /* the colours: bfxr2's tan ground, cream, maroon */
 #define K_BG RGB(231, 209, 167)
@@ -34,7 +36,15 @@ typedef struct {
     uint8_t sel;                         /* the first of the four rows K1 .. K4 change */
     uint8_t slot;                        /* the slot last stored or recalled, 1 .. 16 (0: none) */
     float p[BP_COUNT];                   /* the sound */
+    /* the GLO menu's settings (0.6; a record from before them loads with the defaults) */
+    uint8_t play_on_change;              /* 1: a change plays once the knobs rest */
+    uint8_t voices;                      /* 1 .. NVOICES sounds at once (1: one at a time, as bfxr.net) */
+    uint8_t fast_knobs;                  /* 1: a fast turn moves 3x */
+    uint8_t startup;                     /* 0 animation and sound, 1 animation only, 2 off */
+    uint8_t midi_ch;                     /* MIDI in: 0 every channel, 1 .. 16 one */
+    uint8_t cfg_rsv[3];
 } settings_t;
+#define SET_OLD_SIZE ((uint32_t)__builtin_offsetof(settings_t, play_on_change))   /* the record before the menu's settings */
 static settings_t set;
 static uint8_t set_dirty;
 
@@ -66,6 +76,7 @@ static volatile int32_t bx_playing;              /* sounds playing now */
 static volatile uint32_t bx_load, bx_cuts;       /* the last block's time in %, the sounds cut for time */
 static uint32_t bx_seed = 0x2545F491u;
 static float bx_gain;
+static volatile uint32_t sp_snd = SPLASH_SND_N;  /* the start-up sound: the next sample (SPLASH_SND_N: none) */
 
 static void play_semitones_mode(int32_t st, int mono)
 {
@@ -82,10 +93,13 @@ static void voice_start(float pitch, int mono)   /* audio interrupt */
 {
     uint32_t i, pick = 0, k;
     bfxr_sound_t s;
-    if (mono)
+    uint32_t nv = set.voices >= 1u && set.voices <= NVOICES ? set.voices : NVOICES;
+    if (mono || nv == 1u)
         for (i = 0; i < NVOICES; i++)
             bx_voice[i].active = 0;
-    for (i = 0; i < NVOICES; i++) {              /* a free voice, else the oldest */
+    for (i = nv; i < NVOICES; i++)               /* (fewer voices set: the others stop) */
+        bx_voice[i].active = 0;
+    for (i = 0; i < nv; i++) {                   /* a free voice, else the oldest */
         if (!bx_voice[i].active) {
             pick = i;
             break;
@@ -106,7 +120,7 @@ static void midi_in(void)                /* audio interrupt: notes from USB / TR
     int port;
     while (plat_midi_in(&pkt, &port)) {
         uint32_t st = (pkt >> 8) & 0xFFu, d1 = (pkt >> 16) & 0x7Fu, d2 = pkt >> 24;
-        if ((st & 0xF0u) == 0x90u && d2)
+        if ((st & 0xF0u) == 0x90u && d2 && (!set.midi_ch || (st & 15u) + 1u == set.midi_ch))
             voice_start(fm_exp2f((float)((int32_t)d1 - 60) / 12.0f), 0);
     }
 }
@@ -133,6 +147,12 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         for (i = 0; i < n; i++)
             bx_buf[i] += bx_one[i];
         playing += bx_voice[v].active;
+    }
+    if (sp_snd < SPLASH_SND_N) {                 /* the start-up sound, under the sounds */
+        uint32_t p = sp_snd;
+        for (i = 0; i < n && p < SPLASH_SND_N; i++, p++)
+            bx_buf[i] += (float)SPLASH_SND[p] * (1.0f / 32768.0f);
+        sp_snd = p;
     }
     for (i = 0; i < n; i++) {
         float s;
@@ -167,6 +187,16 @@ void app_panic(void)
 }
 
 /* --------------------------------------------------------------- settings --- */
+static void cfg_defaults(void)
+{
+    set.play_on_change = 1;
+    set.voices = NVOICES;
+    set.fast_knobs = 1;
+    set.startup = 0;
+    set.midi_ch = 0;
+    set.cfg_rsv[0] = set.cfg_rsv[1] = set.cfg_rsv[2] = 0;
+}
+
 static void settings_fresh(void)
 {
     bfxr_sound_t s;
@@ -176,6 +206,7 @@ static void settings_fresh(void)
     set.gen = GEN_PICKUP;
     set.sel = 0;
     set.slot = 0;
+    cfg_defaults();
     bfxr_generate(&s, GEN_PICKUP);
     for (k = 0; k < BP_COUNT; k++)
         set.p[k] = s.p[k];
@@ -194,6 +225,7 @@ static void clamp_sound(float *p)                /* a stored or received sound, 
 void app_init(void)
 {
     uint32_t k;
+    app_panic();                                 /* (silence: a restart in the simulator keeps the old RAM) */
     if (plat_store_load(OBJ_BANK, &bank, sizeof bank) != (int)sizeof bank || bank.magic != BANK_MAGIC) {
         bank.magic = BANK_MAGIC;
         bank.used = 0;
@@ -201,12 +233,18 @@ void app_init(void)
     bank.used &= (1u << NSLOTS) - 1u;
     for (k = 0; k < NSLOTS; k++)
         clamp_sound(bank.p[k]);
-    if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC ||
+    int got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
+    if (got == (int)SET_OLD_SIZE)                /* (saved before the menu: its settings at their defaults) */
+        cfg_defaults();
+    if ((got != (int)sizeof set && got != (int)SET_OLD_SIZE) || set.magic != SET_MAGIC ||
         set.octave < -2 || set.octave > 2 || set.gen >= GEN_COUNT || set.sel > BP_COUNT - 4 || set.slot > NSLOTS) {
         settings_fresh();
         return;
     }
     clamp_sound(set.p);
+    if (set.play_on_change > 1u || set.voices < 1u || set.voices > NVOICES || set.fast_knobs > 1u ||
+        set.startup > 2u || set.midi_ch > 16u)
+        cfg_defaults();
 }
 
 static void sound_get(bfxr_sound_t *s)
@@ -231,6 +269,7 @@ static struct {
     uint32_t edit_at;                    /* a parameter changed: played once the knobs rest */
     int32_t playing;                    /* as last drawn */
     uint8_t save_used;                   /* SAVE is held and a white key stored a slot: no plain save on release */
+    uint8_t menu, menu_row;              /* the GLO menu is open; its row */
     uint8_t redraw;
 } ui;
 
@@ -318,7 +357,7 @@ static void edit_param(uint32_t k, int32_t e)
         bfxr_set(&s, k, (float)(w < 0 ? w + BFXR_NWAVES : w));
     } else {
         int32_t a = e < 0 ? -e : e;
-        float step = (d->max - d->min) * 0.01f * (a >= 3 ? 3.0f : 1.0f);   /* fast turns go 3x */
+        float step = (d->max - d->min) * 0.01f * (a >= 3 && set.fast_knobs ? 3.0f : 1.0f);   /* fast turns: 3x */
         bfxr_set(&s, k, s.p[k] + (float)e * step);
     }
     sound_put(&s);
@@ -338,6 +377,133 @@ static void octave_step(int32_t d)
     t[1] = (char)('0' + (o < 0 ? -o : o));
     t[2] = 0;
     app_say("OCTAVE", t);
+}
+
+/* ------------------------------------------------------- the start-up animation --- */
+/* tools/gen_splash.py's frames: one palette, each frame the XOR of its colour indices with the frame before, LZ4
+ * block-compressed. Its first frame is the boot screen (app_splash, before the app starts); app_ui_init plays the
+ * rest at SPLASH_FRAME_MS a frame with the sound, then the editor. Any key or button skips it. */
+static uint8_t sp_idx[SPLASH_W * SPLASH_H] PLAT_POOL;   /* the frame shown: colour indices */
+static uint8_t sp_tmp[SPLASH_W * SPLASH_H] PLAT_POOL;   /* the next frame's difference */
+static int32_t sp_frame = -1;                    /* the frame in sp_idx (-1: none) */
+static uint32_t sp_t0, sp_keys, sp_btn;
+static uint8_t sp_on;                            /* the animation is playing */
+
+static uint32_t lz4_block(const uint8_t *s, uint32_t n, uint8_t *d, uint32_t cap)   /* bytes out, 0: bad */
+{
+    const uint8_t *e = s + n;
+    uint32_t o = 0;
+    while (s < e) {
+        uint32_t tok = *s++, lit = tok >> 4, m, off;
+        if (lit == 15u) {
+            uint32_t b;
+            do {
+                if (s >= e)
+                    return 0;
+                b = *s++;
+                lit += b;
+            } while (b == 255u);
+        }
+        if (lit > cap - o || lit > (uint32_t)(e - s))
+            return 0;
+        while (lit) {
+            d[o++] = *s++;
+            lit--;
+        }
+        if (s >= e)
+            break;                               /* (the last sequence: literals only) */
+        if (e - s < 2)
+            return 0;
+        off = (uint32_t)s[0] | (uint32_t)s[1] << 8;
+        s += 2;
+        m = tok & 15u;
+        if (m == 15u) {
+            uint32_t b;
+            do {
+                if (s >= e)
+                    return 0;
+                b = *s++;
+                m += b;
+            } while (b == 255u);
+        }
+        m += 4u;
+        if (!off || off > o || m > cap - o)
+            return 0;
+        while (m) {
+            d[o] = d[o - off];
+            o++;
+            m--;
+        }
+    }
+    return o;
+}
+
+static void sp_apply(uint32_t f)                 /* frame f over the one before it */
+{
+    uint32_t i, n = SPLASH_W * SPLASH_H;
+    if (f >= SPLASH_FRAMES)
+        return;
+    if (lz4_block(SPLASH_LZ4 + SPLASH_OFF[f], SPLASH_OFF[f + 1] - SPLASH_OFF[f], sp_tmp, n) != n)
+        return;                                  /* (a bad frame: the one before stays) */
+    for (i = 0; i < n; i++)
+        sp_idx[i] ^= sp_tmp[i];
+    sp_frame = (int32_t)f;
+}
+
+static void sp_draw(void)
+{
+    uint32_t i, n = SPLASH_W * SPLASH_H;
+    cv_begin(SPLASH_W, SPLASH_H, 0);
+    for (i = 0; i < n; i++)
+        cv_px[i] = swap16(SPLASH_PAL[sp_idx[i] & 31u]);
+    cv_blit(0, SPLASH_Y);
+}
+
+static void sp_first(void)                       /* frame 0 on a black screen */
+{
+    uint32_t i;
+    for (i = 0; i < SPLASH_W * SPLASH_H; i++)
+        sp_idx[i] = 0;
+    lcd_fill(0, 0, 240, 240, 0);
+    sp_apply(0);
+    sp_draw();
+}
+
+void app_splash(void) { sp_first(); }
+
+static void sp_end(void)
+{
+    uint32_t k;
+    sp_on = 0;
+    for (k = 0; k < NE; k++)                     /* (turns during it are not edits) */
+        (void)plat_enc((int)k);
+    lcd_fill(0, 0, 240, 240, K_BG);
+    ui.keys = plat_keys();                       /* (a key held to skip it plays nothing) */
+    ui.btn = plat_buttons();
+    ui.redraw = 1;
+}
+
+static void sp_frame_tick(void)                  /* app_frame while it plays */
+{
+    uint32_t keys = plat_keys(), btn = plat_buttons(), now = plat_ms(), target;
+    if ((keys & ~sp_keys) || (btn & ~sp_btn)) {  /* a key or button pressed: skip it */
+        sp_snd = SPLASH_SND_N;
+        sp_end();
+        return;
+    }
+    sp_keys = keys;
+    sp_btn = btn;
+    target = (now - sp_t0) / SPLASH_FRAME_MS;
+    if (target >= SPLASH_FRAMES) {
+        sp_end();
+        return;
+    }
+    if ((int32_t)target > sp_frame) {
+        while ((int32_t)target > sp_frame && sp_frame + 1 < (int32_t)SPLASH_FRAMES)
+            sp_apply((uint32_t)sp_frame + 1u);   /* (every difference in turn: a late frame catches up) */
+        sp_draw();
+    }
+    plat_leds(0, 0);
 }
 
 /* ------------------------------------------------------------------ slots --- */
@@ -528,13 +694,78 @@ int app_sysex(const uint8_t *p, uint32_t n)      /* the bytes between F0 and F7 
     return 0;
 }
 
+/* ------------------------------------------------------------- the GLO menu --- */
+/* GLO opens and closes it (HOME closes it too): SELECT picks a row, K1 or ALGO changes it. Closing keeps the settings
+ * (with the sound, as SAVE does). The keys, PLAY and the octave work as ever meanwhile. */
+enum { MENU_POC, MENU_VOICES, MENU_FAST, MENU_STARTUP, MENU_MIDI, MENU_ROWS };
+static const char *const MENU_LABEL[MENU_ROWS] = {"PLAY ON CHANGE", "VOICES", "FAST KNOBS", "START-UP", "MIDI IN"};
+
+static void menu_value(uint32_t row, char *t)
+{
+    static const char *const SU[3] = {"ANIM + SOUND", "ANIMATION", "OFF"};
+    t[0] = 0;
+    switch (row) {
+    case MENU_POC: text_cat(t, set.play_on_change ? "ON" : "OFF"); break;
+    case MENU_VOICES:
+        t[0] = (char)('0' + set.voices);
+        t[1] = 0;
+        text_cat(t, set.voices == 1u ? " (AS BFXR.NET)" : "");
+        break;
+    case MENU_FAST: text_cat(t, set.fast_knobs ? "ON" : "OFF"); break;
+    case MENU_STARTUP: text_cat(t, SU[set.startup % 3u]); break;
+    default:
+        if (!set.midi_ch)
+            text_cat(t, "ALL CHANNELS");
+        else {
+            text_cat(t, "CHANNEL ");
+            if (set.midi_ch >= 10u) {
+                char d[3] = {'1', (char)('0' + set.midi_ch - 10u), 0};
+                text_cat(t, d);
+            } else {
+                char d[2] = {(char)('0' + set.midi_ch), 0};
+                text_cat(t, d);
+            }
+        }
+        break;
+    }
+}
+
+static int32_t wrapi(int32_t v, int32_t lo, int32_t hi) { return v < lo ? hi : v > hi ? lo : v; }
+
+static void menu_change(int32_t e)
+{
+    char t[24];
+    int32_t d = e > 0 ? 1 : -1;
+    switch (ui.menu_row) {
+    case MENU_POC: set.play_on_change ^= 1u; break;
+    case MENU_VOICES: set.voices = (uint8_t)clamp((int32_t)set.voices + d, 1, NVOICES); break;
+    case MENU_FAST: set.fast_knobs ^= 1u; break;
+    case MENU_STARTUP: set.startup = (uint8_t)wrapi((int32_t)set.startup + d, 0, 2); break;
+    default: set.midi_ch = (uint8_t)wrapi((int32_t)set.midi_ch + d, 0, 16); break;
+    }
+    set_dirty = 1;
+    menu_value(ui.menu_row, t);
+    app_say(MENU_LABEL[ui.menu_row], t);
+}
+
+static void menu_close(void)
+{
+    ui.menu = 0;
+    if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
+        set_dirty = 0;
+        app_say("SETTINGS", "KEPT");
+    } else {
+        app_say("SETTINGS", "NOT SAVED");
+    }
+}
+
 static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k;
     int32_t e;
     for (k = 0; k < NKEYS; k++) {                /* key 0 is F3 (MIDI 53); C4 plays the sound as made */
         uint32_t bit = 1u << k;
-        if ((keys & bit) && !(ui.keys & bit) && (btn & (1u << B_SAVE | 1u << B_SEL))) {
+        if ((keys & bit) && !(ui.keys & bit) && !ui.menu && (btn & (1u << B_SAVE | 1u << B_SEL))) {
             int32_t i = key_slot(k);             /* SAVE + a white key: store; SEL + a white key: recall */
             if (i >= 0 && (btn >> B_SAVE & 1u)) {
                 slot_store((uint32_t)i);
@@ -554,6 +785,18 @@ static void input(void)
         uint32_t bit = 1u << k;
         if (!(btn & bit) || (ui.btn & bit))
             continue;
+        if (k == B_GLO || (ui.menu && k == B_HOME)) {
+            if (ui.menu)
+                menu_close();
+            else {
+                ui.menu = 1;
+                app_say("SETTINGS", "");
+            }
+            ui.redraw = 1;
+            continue;
+        }
+        if (ui.menu && k != B_PLAY && k != B_OCTDN && k != B_OCTUP)
+            continue;                            /* (the menu open: the rest wait) */
         if (k == B_PLAY)
             play_now();
         else if (k == B_EDIT)
@@ -576,7 +819,7 @@ static void input(void)
         } else if (k == B_SAVE)
             ui.save_used = 0;                    /* (it acts on release: a slot may be stored meanwhile) */
     }
-    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_used) {   /* SAVE tapped: keep the sound */
+    if (!ui.menu && !(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_used) {   /* SAVE tapped: keep it */
         if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
             set_dirty = 0;
             app_say("SAVED", "");
@@ -590,6 +833,17 @@ static void input(void)
     for (k = 0; k < NE; k++) {
         if ((e = plat_enc((int)k)) == 0)
             continue;
+        if (ui.menu) {                           /* the menu: SELECT a row, K1 / ALGO its value */
+            if (k == EN_SELECT) {
+                char t[24];
+                ui.menu_row = (uint8_t)clamp((int32_t)ui.menu_row + e, 0, MENU_ROWS - 1);
+                menu_value(ui.menu_row, t);
+                app_say(MENU_LABEL[ui.menu_row], t);
+            } else if (k == EN_K1 || k == EN_ALGO)
+                menu_change(e);
+            ui.redraw = 1;
+            continue;
+        }
         if (k == EN_SELECT) {
             set.sel = (uint8_t)clamp((int32_t)set.sel + e, 0, BP_COUNT - 4);
             say_param(set.sel);
@@ -605,18 +859,23 @@ static void input(void)
     }
     if (ui.edit_at && plat_ms() - ui.edit_at >= 300u) {   /* as bfxr.net: a change is heard once you let go */
         ui.edit_at = 0;
-        play_now();
+        if (set.play_on_change)
+            play_now();
     }
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
     ui.btn = btn;
     plat_glow(1);
-    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u),
+    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u) | (ui.menu ? 1u << B_GLO : 0u),
               (btn & (1u << B_SAVE | 1u << B_SEL)) ? slot_keys() | keys : keys);   /* SAVE / SEL held: the slots */
 }
 
-void app_input_only(void) { input(); }
+void app_input_only(void)
+{
+    if (!sp_on)
+        input();
+}
 
 /* the value as a bar: from the left for a range from 0, from the middle for one from -x to x. A bar from the left
  * reads straight off the number (0.43: 43 % of the bar), also where the range starts a little above 0 (DECAY 0.03,
@@ -682,6 +941,21 @@ static void draw(void)
             cv_text(236 - text_w(&FONT_XS, t), y + 3, &FONT_XS, t, on ? K_INK : K_SOFT);
         }
     }
+    /* the GLO menu, over the list */
+    if (ui.menu) {
+        cv_rect(0, 32, 240, 182, K_BG);
+        cv_text(10, 40, &FONT_B, "SETTINGS", K_BAR);
+        for (r = 0; r < MENU_ROWS; r++) {
+            int32_t y = 66 + (int32_t)r * 26;
+            int on = r == ui.menu_row;
+            if (on)
+                cv_rect(0, y - 3, 240, 22, K_ROW);
+            cv_text(10, y, &FONT_XS, MENU_LABEL[r], on ? K_INK : K_LABEL);
+            menu_value(r, t);
+            cv_text(232 - text_w(&FONT_XS, t), y, &FONT_XS, t, on ? K_BAR : K_SOFT);
+        }
+        cv_text(10, 198, &FONT_XS, "SELECT: ROW   K1: CHANGE   GLO: CLOSE", K_SOFT);
+    }
     /* SAVE or SEL held: the 16 slots, as the white keys lie (filled: a sound stored) */
     if (ui.btn & (1u << B_SAVE | 1u << B_SEL)) {
         const char *what = (ui.btn >> B_SAVE & 1u) ? "STORE: PRESS A WHITE KEY" : "RECALL: PRESS A WHITE KEY";
@@ -733,13 +1007,25 @@ static void speak(void)
 
 void app_ui_init(void)
 {
-    lcd_fill(0, 0, 240, 240, K_BG);
-    ui.redraw = 1;
+    if (sp_frame != 0)                           /* (the host simulator shows no boot screen) */
+        sp_first();
+    sp_keys = plat_keys();
+    sp_btn = plat_buttons();
+    sp_t0 = plat_ms();
+    sp_on = 1;
+    sp_snd = set.startup == 0 ? 0u : SPLASH_SND_N;   /* the sound, from the start (START-UP: ANIM + SOUND) */
+    if (set.startup == 2u)                       /* START-UP: OFF (the boot screen showed its first frame) */
+        sp_end();
 }
 
 void app_frame(void)
 {
     uint32_t now = plat_ms();
+    if (sp_on) {                                 /* the start-up animation */
+        sp_frame_tick();
+        bsx_pump();
+        return;
+    }
     input();
     bsx_pump();
     speak();
@@ -778,6 +1064,18 @@ int app_expect(const char *what, int *got)
         *got = (int)bank.used;
     else if (!strcmp(what, "slot"))
         *got = set.slot;
+    else if (!strcmp(what, "splash"))            /* the start-up animation is playing */
+        *got = sp_on;
+    else if (!strcmp(what, "menu"))
+        *got = ui.menu;
+    else if (!strcmp(what, "voices"))
+        *got = set.voices;
+    else if (!strcmp(what, "poc"))
+        *got = set.play_on_change;
+    else if (!strcmp(what, "startup"))
+        *got = set.startup;
+    else if (!strcmp(what, "midich"))
+        *got = set.midi_ch;
     else if (what[0] == 'p' && what[1] >= '0' && what[1] <= '9')   /* pN: parameter N x 100 */
         *got = (int)(set.p[atoi(what + 1) % BP_COUNT] * 100.0f + (set.p[atoi(what + 1) % BP_COUNT] < 0 ? -0.5f : 0.5f));
     else

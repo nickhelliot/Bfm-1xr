@@ -14,6 +14,10 @@
 enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_BANK, OBJ_NOBJ };
 #define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDE000u}
 
+/* the start-up animation's first frame as the boot screen (app.c "the start-up animation") */
+#define APP_SPLASH
+void app_splash(void);
+
 /* the slots over USB (the Library page): SysEx F0 7D 42 46 cmd .. F7, see app.c */
 #define APP_SYSEX
 int app_sysex(const uint8_t *p, uint32_t n);

@@ -14,12 +14,17 @@ hits, jumps and blips, made the way bfxr.net makes them and played from the keys
 1. Connect the FM-1 to your computer by USB and switch it on.
 2. Open **https://nickhelliot.github.io/Bfm-1xr/install/** in Chrome or Edge. Allow MIDI access when the browser asks.
 3. Press **Connect**, then **Install**. Keep the cable in and the tab open until it says it's done. The FM-1 restarts
-   into BFMXR: a cream screen with a maroon header.
+   into BFMXR: its start-up animation, then a cream screen with a maroon header.
 
 If an install is interrupted, plug the FM-1 back in and press **Install** again: it carries on where it stopped.
 
 To go back to M-VAVE's firmware or to another one, use the same page or the
 [FM-1 Firmware Hub](https://thefirmwarehub.com). Installing firmware is at your own risk.
+
+## Start-up
+
+Each time you switch on, BFMXR plays its animation with a sound for about a second and a half, then opens the editor.
+Press any key or button to skip it. **GLO → START-UP** turns the sound or the whole animation off.
 
 ## The screen
 
@@ -45,6 +50,7 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 | **Keys** | Play the sound at a pitch. **C4** (the 5th white key from the left) plays it as made; the others transpose it. Press several for a chord: up to 4 sounds at once |
 | **OCT− / OCT+** | Shift the keys and PLAY down or up an octave (−2 to +2) |
 | **HOME** | Jumps back to the top of the list |
+| **GLO** | Opens and closes the settings (below) |
 | **SAVE** (tap) | Keeps the sound: it's there again the next time you switch on. SAVE is lit while there's something unsaved |
 | **SAVE + a white key** | Stores the sound in that key's slot (16 slots, one per white key) |
 | **SEL + a white key** | Recalls the sound from that key's slot and plays it |
@@ -58,6 +64,22 @@ If a chord of very heavy sounds (lots of HARMONICS, or TAN) is more than the FM-
 oldest sound rather than letting the audio crackle.
 
 **MIDI:** notes from USB play the sound (middle C at its own pitch), chords too, and the keys send notes out over USB.
+
+## Settings (GLO)
+
+Press **GLO** to open the settings. **SELECT** picks a row, **K1** (or **ALGO**) changes it, and **GLO** or **HOME**
+closes them. Closing keeps the settings (and your current sound, as SAVE does). The keys, PLAY and the octave still
+work while the settings are open.
+
+| Setting | What it does | Default |
+| --- | --- | --- |
+| PLAY ON CHANGE | Plays the sound when you stop turning a knob. Off: only PLAY and the keys play it | ON |
+| VOICES | How many sounds can play at once, 1 to 4. **1** plays one at a time, as bfxr.net does: a new key cuts the last | 4 |
+| FAST KNOBS | A fast turn moves 3 steps a click instead of 1 | ON |
+| START-UP | ANIM + SOUND, ANIMATION (silent), or OFF | ANIM + SOUND |
+| MIDI IN | The MIDI channel BFMXR plays from: all, or one of 1 to 16 | ALL CHANNELS |
+
+![The settings](docs/menu.png)
 
 ## Making a sound
 
@@ -186,6 +208,7 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 | `app/bfxr.c` | The sound engine and the sound generators (from bfxr2) |
 | `app/app.c` | The screen, the controls, saving |
 | `app/tests/basic.txt` | The simulator's checks |
+| `app/assets/`, `tools/gen_splash.py` | The start-up animation and sound, and the tool that turns them into `app/splash_data.h` |
 | `web/library/index.html` | The Library page (the slots over USB: SysEx, described in `app/app.c`) |
 | `tools/check_engine.c`, `tools/gen_ref.js` | The comparison with bfxr2's JavaScript |
 | `tools/library_test.mjs` | The Library page's protocol against the simulator |
@@ -195,6 +218,7 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 
 - Sound engine and generators: [bfxr2](https://github.com/increpare/bfxr2) by Stephen Lavelle (MIT), from Thomas
   Vian's SfxrSynth (Apache-2.0)
+- Start-up animation and sound: by Dad
 - Waves: [Adventure Kid Waveforms](https://www.adventurekid.se/akrt/waveforms/adventure-kid-waveforms/) (CC0)
 - Platform: [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal and
   [felucca-bsp](https://github.com/hugelton/felucca-bsp) by Leo Kuroshita (MPL-2.0), in `base/`
