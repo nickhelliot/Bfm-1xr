@@ -5,7 +5,7 @@ hits, jumps and blips, made the way bfxr.net makes them and played from the keys
 
 ![The BFXR screen](docs/screen.png)
 
-**[Install it](https://nickhelliot.github.io/Bfm-1xr/install/)** · **[Try it in your browser](https://nickhelliot.github.io/Bfm-1xr/emu/)**
+**[Install it](https://nickhelliot.github.io/Bfm-1xr/install/)** · **[Try it in your browser](https://nickhelliot.github.io/Bfm-1xr/emu/)** · **[Library: your sounds on your computer](https://nickhelliot.github.io/Bfm-1xr/library/)**
 
 ---
 
@@ -23,7 +23,8 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 
 ## The screen
 
-- **Header:** BFXR, the kind of sound you last made, and **PLAYING** while a sound plays.
+- **Header:** BFXR, the slot you last stored or recalled (SLOT 3), the kind of sound you last made, and **PLAYING**
+  while a sound plays.
 - **The list:** bfxr's 32 parameters, each with a bar and its value. The bar fills from the left for settings that
   go from 0 up, and from the middle for settings that go both ways (up or down, faster or slower).
 - **K1 to K4:** the four highlighted rows are the ones the four knobs change.
@@ -44,7 +45,9 @@ To go back to M-VAVE's firmware or to another one, use the same page or the
 | **Keys** | Play the sound at a pitch. **C4** (the 5th white key from the left) plays it as made; the others transpose it |
 | **OCT− / OCT+** | Shift the keys and PLAY down or up an octave (−2 to +2) |
 | **HOME** | Jumps back to the top of the list |
-| **SAVE** | Keeps the sound: it's there again the next time you switch on. SAVE is lit while there's something unsaved |
+| **SAVE** (tap) | Keeps the sound: it's there again the next time you switch on. SAVE is lit while there's something unsaved |
+| **SAVE + a white key** | Stores the sound in that key's slot (16 slots, one per white key) |
+| **SEL + a white key** | Recalls the sound from that key's slot and plays it |
 | **MASTER** | Volume |
 
 After you change a value, the sound plays once you stop turning, as bfxr.net plays when you let go of a slider.
@@ -60,10 +63,40 @@ After you change a value, the sound plays once you stop turning, as bfxr.net pla
    - **Pitch:** FREQUENCY, and FREQ SLIDE to make it rise or fall.
    - **Character:** the wave (**ALGO**), HARMONICS, LOWPASS, BIT CRUSH.
 4. **Play it in tune.** Use the keys and **OCT− / OCT+** to hear it higher or lower.
-5. **Keep it.** Press **SAVE**.
+5. **Keep it.** Hold **SAVE** and press a white key to store it in a slot, then make the next one.
 
-BFXR keeps one sound. To keep several, record each one (the FM-1 is a USB audio input: record it in any DAW) before
-you make the next.
+## Storing sounds
+
+BFXR has 16 slots, one for each white key, from the lowest (slot 1) to the highest (slot 16). They're kept when you
+switch off.
+
+- **Store:** hold **SAVE** and press a white key. The sound goes into that slot, replacing whatever was there.
+- **Recall:** hold **SEL** and press a white key. The slot's sound comes back, ready to play and edit. Editing it
+  doesn't change the slot until you store it again.
+- **See what's where:** while you hold SAVE or SEL, the screen shows the 16 slots (filled: a sound stored, outlined:
+  the slot you used last) and the white keys light up where a sound is stored.
+- **Tap SAVE** on its own to keep just the sound you're editing, as before.
+
+![Holding SAVE: the 16 slots](docs/slots.png)
+
+## Your sounds on your computer: the Library
+
+The **[Library](https://nickhelliot.github.io/Bfm-1xr/library/)** page reads the slots from the FM-1 over USB.
+
+1. Connect the FM-1 by USB with BFXR running, open the Library in Chrome or Edge, and press **Connect** (allow MIDI
+   and SysEx when the browser asks). It reads the slots at once; **Read sounds** reads them again.
+2. For each sound:
+   - **Play** plays it on the computer.
+   - **.bfxr** saves it as a bfxr.net file: drop it on [bfxr.net](https://www.bfxr.net) to keep editing it there.
+   - **.wav** saves it as audio, ready for a game engine or a DAW.
+   - **Clear** empties the slot on the FM-1.
+3. **Download all (.zip)** saves every stored sound as both .bfxr and .wav in one file.
+4. **Send** puts a .bfxr file from your computer into a slot, or into the sound you're editing ("Editing"). Make a
+   sound on bfxr.net, save it with **Save .bfxr**, and send it to the FM-1. Only bfxr.net's Bfxr sounds can go to the
+   FM-1, not its other synths.
+
+The .wav files are rendered by bfxr's own code, so they sound as on bfxr.net. You can also record the FM-1 itself:
+it's a USB audio input in any DAW.
 
 ## The parameters
 
@@ -118,8 +151,9 @@ The same as bfxr.net's sliders, in the same order. Values are bfxr's, from 0 to 
 
 - **It won't start, or keeps restarting:** hold **OCT−** while switching on. The FM-1 starts in its USB updater, with
   no sound, so you can install BFXR again or another firmware.
-- **The installer can't find the FM-1:** use Chrome or Edge, allow MIDI access, and try another USB cable or port.
-  Close other programs that use MIDI (DAWs, other installer tabs).
+- **The installer or the Library can't find the FM-1:** use Chrome or Edge, allow MIDI access, and try another USB
+  cable or port. Close other programs that use MIDI (DAWs, other installer or Library tabs). If you see a list of
+  ports on the Library page, pick the FM-1's.
 
 ---
 
@@ -147,7 +181,9 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 | `app/bfxr.c` | The sound engine and the sound generators (from bfxr2) |
 | `app/app.c` | The screen, the controls, saving |
 | `app/tests/basic.txt` | The simulator's checks |
+| `web/library/index.html` | The Library page (the slots over USB: SysEx, described in `app/app.c`) |
 | `tools/check_engine.c`, `tools/gen_ref.js` | The comparison with bfxr2's JavaScript |
+| `tools/library_test.mjs` | The Library page's protocol against the simulator |
 | `base/` | fm1-base, the platform (a git submodule) |
 
 ## Credits and licence

@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: MIT
+// The Library page's protocol code (web/library/index.html, between its "protocol" markers) against the FM-1's, in the
+// host simulator: a bfxr2 sound written into a slot over SysEx, the list read back and decoded, the .bfxr file it makes
+// opened by bfxr2's library, the .wav and the .zip checked.
+//   node tools/library_test.mjs BFXR2_DIR      (after ./build.sh --host)
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import {execFileSync} from 'node:child_process';
+
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const bfxrDir = process.argv[2];
+if (!bfxrDir) { console.error('usage: node tools/library_test.mjs BFXR2_DIR'); process.exit(2); }
+const page = fs.readFileSync(path.join(root, 'web/library/index.html'), 'utf8');
+const code = page.slice(page.indexOf('// --- protocol ---'), page.indexOf('// --- end protocol ---'));
+const P = new Function(code + '; return {PARAMS, NSLOTS, CURRENT, encodeSound, decodeSound, listRequest, writeRequest, ' +
+                       'clearRequest, parseFrame, toBfxr, fromBfxr, wavBytes, zipBytes, slotName};')();
+globalThis.window = globalThis;
+(0, eval)(fs.readFileSync(path.join(bfxrDir, 'lib', 'bfxrlib.js'), 'utf8'));
+const bfxr = globalThis.bfxr;
+
+let fails = 0;
+const check = (ok, what) => { console.log(`${ok ? '  ok' : 'FAIL'} ${what}`); if (!ok) fails++; };
+const f32 = v => Math.fround(v);
+const hex = b => b.map(x => x.toString(16).padStart(2, '0')).join(' ');
+
+// 1. a bfxr2 sound, as the page reads a .bfxr file
+const preset = bfxr.preset('Bfxr', 'laser_shoot', 4242);
+const file = JSON.stringify({synth_type: 'Bfxr', version: '1.0.4', file_name: 'laser', params: preset.params});
+const values = P.fromBfxr(file);
+check(values.length === 32, 'a .bfxr file read: 32 parameters');
+check(P.decodeSound(P.encodeSound(values)).every((v, k) => v === f32(values[k])), 'encode / decode: the floats exactly');
+let refused = false;
+try { P.fromBfxr(JSON.stringify({synth_type: 'Pluckr', params: {}})); } catch (e) { refused = true; }
+check(refused, 'another synth\'s file is refused');
+
+// 2. the FM-1: write it into slot 4 (index 3), list, clear slot 4 again in a second run
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bfxr-lib-'));
+const host = path.join(root, 'app/build/host/bfxr_host');
+const log = path.join(tmp, 'sysex.bin');
+const script = ['wait 600', `sysex_log ${log}`, `sysex ${hex(P.writeRequest(3, values))}`, 'wait 50',
+                `sysex ${hex(P.listRequest())}`, 'wait 300', `sysex ${hex(P.clearRequest(3))}`, 'wait 50',
+                `sysex ${hex(P.listRequest())}`, 'wait 300', 'sysex_log off'].join('\n') + '\n';
+fs.writeFileSync(path.join(tmp, 'script.txt'), script);
+execFileSync(host, [path.join(tmp, 'script.txt'), tmp], {stdio: 'pipe'});
+const raw = fs.readFileSync(log), frames = [];
+for (let i = 0; i < raw.length; i++) if (raw[i] === 0xF0) {
+  const j = raw.indexOf(0xF7, i);
+  frames.push(Array.from(raw.subarray(i, j + 1)));
+  i = j;
+}
+const parsed = frames.map(f => P.parseFrame(f)).filter(Boolean);
+const replies = parsed.filter(f => f.type === 'reply'), ends = parsed.filter(f => f.type === 'end');
+check(replies.length === 2 && replies.every(r => r.slot === 3 && r.status === 0), 'write and clear answered: done');
+check(ends.length === 2 && ends[0].version === 1 && ends[0].nslots === 16, 'two lists, each ended (version 1, 16 slots)');
+const firstList = parsed.slice(parsed.indexOf(replies[0]) + 1, parsed.indexOf(ends[0]));
+const secondList = parsed.slice(parsed.indexOf(replies[1]) + 1, parsed.indexOf(ends[1]));
+check(firstList.length === 17 && secondList.length === 17, 'each list: 16 slots and the sound being edited');
+const s4 = firstList.find(f => f.slot === 3);
+check(s4 && s4.used && s4.values.every((v, k) => v === f32(values[k])), 'slot 4 read back as written');
+check(secondList.find(f => f.slot === 3).used === false, 'slot 4 empty after the clear');
+check(firstList.find(f => f.slot === P.CURRENT).used === true, 'the sound being edited is in the list');
+
+// 3. the files: the .bfxr opens in bfxr2's library and sounds as the original; the .wav and the .zip are whole
+const out = P.toBfxr(s4.values, P.slotName(3));
+const a = bfxr.render({...preset, renderSeed: 0.5}), b = bfxr.render(out);
+let maxd = 0;
+for (let i = 0; i < Math.min(a.length, b.length); i++) maxd = Math.max(maxd, Math.abs(a[i] - b[i]));
+check(Math.abs(a.length - b.length) <= 64 && maxd < 0.02, `the .bfxr renders as the original (length ${b.length} vs ${a.length}, ` +
+      `largest difference ${maxd.toFixed(4)})`);
+check(JSON.parse(out).synth_type === 'Bfxr' && P.slotName(3) === 'bfxr-slot-04', 'the .bfxr file: Bfxr, named for its slot');
+const wav = P.wavBytes(b, 44100);
+check(String.fromCharCode(...wav.slice(0, 4)) === 'RIFF' && wav.length === 44 + 2 * b.length, 'the .wav: RIFF, 16-bit mono');
+const zip = P.zipBytes([['a.bfxr', new TextEncoder().encode(out)], ['a.wav', wav]]);
+fs.writeFileSync(path.join(tmp, 'test.zip'), zip);
+let zipOk = true;
+try {
+  const r = execFileSync('python3', ['-c', 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; ' +
+                                    'print(",".join(z.namelist()))', path.join(tmp, 'test.zip')]).toString().trim();
+  zipOk = r === 'a.bfxr,a.wav';
+} catch (e) { zipOk = false; }
+check(zipOk, 'the .zip: whole, both files in it');
+
+console.log(fails ? `${fails} failed` : 'library: all passed');
+process.exit(fails ? 1 : 0);

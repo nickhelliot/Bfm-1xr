@@ -10,6 +10,8 @@ This is version {{VERSION}}. You install it at your own risk, and the installer 
 
 - [Try it in the browser](emu/). It runs the same code as the FM-1, with sound.
 - [Install](install/) it from Chrome or Edge, with the FM-1 connected by USB.
+- The [Library](library/): the 16 sounds stored on your FM-1, played, saved as .bfxr (bfxr.net's file) or .wav,
+  and .bfxr files sent back.
 - [Download {{PKG}}](firmware/{{PKG}}) for the command-line installer: `python3 base/tools/fm1_install.py {{PKG}}`.
 - The [Source](https://github.com/nickhelliot/Bfm-1xr) is MIT. The sound engine and generators are
   [bfxr2](https://github.com/increpare/bfxr2) by Stephen Lavelle, from Thomas Vian's SfxrSynth; it runs on

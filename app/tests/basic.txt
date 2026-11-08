@@ -74,3 +74,72 @@ expect gen 5
 tap OCT+
 wait 30
 expect octave 1
+
+# --- slots: SAVE + a white key stores, SEL + a white key recalls (white key 0 is slot 1, key 2 slot 2, ...)
+turn PRESET 1
+wait 30
+press SAVE
+key 0 down
+wait 30
+key 0 up
+shot slots.png
+release SAVE
+wait 30
+expect slots 1
+expect slot 1
+expect dirty 0
+# a tap of SAVE alone still keeps the sound
+turn K2 1
+wait 30
+expect dirty 1
+tap SAVE
+wait 30
+expect dirty 0
+# SEL + a white key with nothing stored: nothing changes
+press SEL
+key 2 down
+wait 30
+key 2 up
+release SEL
+wait 30
+expect slot 1
+# a key while SAVE / SEL is up plays as ever
+key 7 down
+wait 30
+expect playing 1
+key 7 up
+# --- over USB: write slot 6 (index 5, a default sound), list, recall it, clear it
+sysex F0 7D 42 46 04 05 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+wait 30
+expect_sysex F0 7D 42 46 05 05 00 F7
+expect slots 33
+sysex_out
+sysex F0 7D 42 46 01 F7
+wait 200
+expect_sysex F0 7D 42 46 02 05 01 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+expect_sysex F0 7D 42 46 03 01 10 F7
+press SEL
+key 9 down
+wait 30
+key 9 up
+release SEL
+wait 30
+expect slot 6
+expect p7 30
+expect p25 100
+sysex_out
+sysex F0 7D 42 46 06 05 F7
+wait 30
+expect_sysex F0 7D 42 46 05 05 00 F7
+expect slots 1
+expect slot 0
+# a bad frame is refused
+sysex_out
+sysex F0 7D 42 46 04 02 01 F7
+wait 30
+expect_sysex F0 7D 42 46 05 02 01 F7
+expect slots 1
+# the slots survive a power cycle
+reboot
+wait 600
+expect slots 1

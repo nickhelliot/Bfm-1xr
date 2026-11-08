@@ -9,7 +9,10 @@
  *   SELECT          scroll the list of 32 parameters; K1 .. K4 change the four marked rows
  *   ALGO            the wave
  *   PLAY, the keys  play it (C4 at the sound's own pitch, the other keys transpose it); OCT- / OCT+ the octave
- *   SAVE            keep the sound (it is back at the next power-on); MASTER the volume */
+ *   SAVE            keep the sound (it is back at the next power-on); MASTER the volume
+ *   SAVE + a white key   store the sound in that slot (16 slots, one a white key)
+ *   SEL + a white key    recall the slot's sound and play it
+ * The slots go to and from a computer over USB SysEx (the site's Library page): see "the slots over USB" below. */
 #include "fastmath.h"
 #include "bfxr.h"
 
@@ -28,11 +31,21 @@ typedef struct {
     int8_t octave;                       /* -2 .. +2 */
     uint8_t gen;                         /* the kind of sound last made (GEN_*) */
     uint8_t sel;                         /* the first of the four rows K1 .. K4 change */
-    uint8_t rsv;
+    uint8_t slot;                        /* the slot last stored or recalled, 1 .. 16 (0: none) */
     float p[BP_COUNT];                   /* the sound */
 } settings_t;
 static settings_t set;
 static uint8_t set_dirty;
+
+/* the slots: 16 sounds, one a white key (left to right), kept in flash */
+#define NSLOTS 16u
+#define BANK_MAGIC 0x424E4B31u           /* "BNK1" */
+typedef struct {
+    uint32_t magic;
+    uint32_t used;                       /* bit k: slot k holds a sound */
+    float p[NSLOTS][BP_COUNT];
+} bank_t;
+static bank_t bank;
 
 /* ------------------------------------------------------------------ sound --- */
 /* the main loop asks for a sound (the parameters in set.p, a pitch); the audio interrupt starts it */
@@ -102,24 +115,38 @@ static void settings_fresh(void)
     set.octave = 0;
     set.gen = GEN_PICKUP;
     set.sel = 0;
+    set.slot = 0;
     bfxr_generate(&s, GEN_PICKUP);
     for (k = 0; k < BP_COUNT; k++)
         set.p[k] = s.p[k];
 }
 
+static void clamp_sound(float *p)                /* a stored or received sound, kept in range */
+{
+    uint32_t k;
+    for (k = 0; k < BP_COUNT; k++) {
+        bfxr_sound_t s;
+        bfxr_set(&s, k, p[k]);
+        p[k] = s.p[k];
+    }
+}
+
 void app_init(void)
 {
     uint32_t k;
+    if (plat_store_load(OBJ_BANK, &bank, sizeof bank) != (int)sizeof bank || bank.magic != BANK_MAGIC) {
+        bank.magic = BANK_MAGIC;
+        bank.used = 0;
+    }
+    bank.used &= (1u << NSLOTS) - 1u;
+    for (k = 0; k < NSLOTS; k++)
+        clamp_sound(bank.p[k]);
     if (plat_store_load(OBJ_SETTINGS, &set, sizeof set) != (int)sizeof set || set.magic != SET_MAGIC ||
-        set.octave < -2 || set.octave > 2 || set.gen >= GEN_COUNT || set.sel > BP_COUNT - 4) {
+        set.octave < -2 || set.octave > 2 || set.gen >= GEN_COUNT || set.sel > BP_COUNT - 4 || set.slot > NSLOTS) {
         settings_fresh();
         return;
     }
-    for (k = 0; k < BP_COUNT; k++) {             /* a saved sound, kept in range */
-        bfxr_sound_t s;
-        bfxr_set(&s, k, set.p[k]);
-        set.p[k] = s.p[k];
-    }
+    clamp_sound(set.p);
 }
 
 static void sound_get(bfxr_sound_t *s)
@@ -143,6 +170,7 @@ static struct {
     uint32_t keys, btn;
     uint32_t edit_at;                    /* a parameter changed: played once the knobs rest */
     int32_t playing;                    /* as last drawn */
+    uint8_t save_used;                   /* SAVE is held and a white key stored a slot: no plain save on release */
     uint8_t redraw;
 } ui;
 
@@ -252,13 +280,208 @@ static void octave_step(int32_t d)
     app_say("OCTAVE", t);
 }
 
+/* ------------------------------------------------------------------ slots --- */
+static int32_t key_slot(uint32_t k)              /* the slot of key k (a white key), -1 for a black key */
+{
+    static const uint8_t WK[NSLOTS] = PLAT_WHITE_KEYS;
+    uint32_t i;
+    for (i = 0; i < NSLOTS; i++)
+        if (WK[i] == k)
+            return (int32_t)i;
+    return -1;
+}
+
+static uint32_t slot_keys(void)                  /* the white keys whose slots hold a sound: their LEDs */
+{
+    static const uint8_t WK[NSLOTS] = PLAT_WHITE_KEYS;
+    uint32_t i, m = 0;
+    for (i = 0; i < NSLOTS; i++)
+        if (bank.used >> i & 1u)
+            m |= 1u << WK[i];
+    return m;
+}
+
+static int bank_save(void) { return plat_store_save(OBJ_BANK, &bank, sizeof bank); }
+
+static void slot_store(uint32_t i)
+{
+    char t[4] = {(char)('0' + (i + 1) / 10), (char)('0' + (i + 1) % 10), 0, 0};
+    uint32_t k;
+    if (t[0] == '0') {
+        t[0] = t[1];
+        t[1] = 0;
+    }
+    for (k = 0; k < BP_COUNT; k++)
+        bank.p[i][k] = set.p[k];
+    bank.used |= 1u << i;
+    set.slot = (uint8_t)(i + 1);
+    set_dirty = 1;
+    app_say(bank_save() == 0 ? "STORED IN SLOT" : "STORE FAILED", t);
+}
+
+static void slot_recall(uint32_t i)
+{
+    char t[4] = {(char)('0' + (i + 1) / 10), (char)('0' + (i + 1) % 10), 0, 0};
+    uint32_t k;
+    if (t[0] == '0') {
+        t[0] = t[1];
+        t[1] = 0;
+    }
+    if (!(bank.used >> i & 1u)) {
+        app_say("SLOT EMPTY", t);
+        return;
+    }
+    for (k = 0; k < BP_COUNT; k++)
+        set.p[k] = bank.p[i][k];
+    set.slot = (uint8_t)(i + 1);
+    set_dirty = 1;
+    app_say("SLOT", t);
+    play_now();
+}
+
+/* ------------------------------------------------------- the slots over USB --- */
+/* SysEx, all 7-bit, F0 7D 42 46 ("BF", 7D: the non-commercial ID; the screen reader's is 7D 53 52) cmd .. F7:
+ *   computer -> FM-1   01                       list: the FM-1 answers 02 for each slot, then 03
+ *                      04 SLOT SOUND            write SLOT (0 .. 15; 16: the sound being edited); answered by 05
+ *                      06 SLOT                  clear SLOT (0 .. 15); answered by 05
+ *   FM-1 -> computer   02 SLOT USED SOUND       SLOT 0 .. 15, then 16 (the sound being edited); USED 0 / 1
+ *                      03 VERSION NSLOTS        the end of a list (protocol version 1)
+ *                      05 SLOT STATUS           0 done, 1 refused (a bad slot or length), 2 the flash write failed
+ * SOUND: the 32 parameters in bfxr.h's order, each a float's 32 bits in five 7-bit bytes, low bits first (160 bytes).
+ * The FM-1 sends a list a frame at a time as the computer reads (app_frame). */
+#define SX_SOUND (BP_COUNT * 5u)
+static const uint8_t SX_HEAD[4] = {0xF0, 0x7D, 0x42, 0x46};
+static uint8_t sx_frame[8 + SX_SOUND];
+static int32_t sx_next = -1;                     /* the list being sent: the next slot (-1 none, NSLOTS + 1 the end) */
+
+static void sx_put_sound(uint8_t *d, const float *p)
+{
+    uint32_t k;
+    for (k = 0; k < BP_COUNT; k++) {
+        union { float f; uint32_t u; } b;
+        b.f = p[k];
+        d[5 * k] = (uint8_t)(b.u & 0x7Fu);
+        d[5 * k + 1] = (uint8_t)(b.u >> 7 & 0x7Fu);
+        d[5 * k + 2] = (uint8_t)(b.u >> 14 & 0x7Fu);
+        d[5 * k + 3] = (uint8_t)(b.u >> 21 & 0x7Fu);
+        d[5 * k + 4] = (uint8_t)(b.u >> 28 & 0x0Fu);
+    }
+}
+static void sx_get_sound(const uint8_t *d, float *p)
+{
+    uint32_t k;
+    for (k = 0; k < BP_COUNT; k++) {
+        union { float f; uint32_t u; } b;
+        b.u = (uint32_t)d[5 * k] | (uint32_t)d[5 * k + 1] << 7 | (uint32_t)d[5 * k + 2] << 14 |
+              (uint32_t)d[5 * k + 3] << 21 | (uint32_t)(d[5 * k + 4] & 0x0Fu) << 28;
+        p[k] = b.f;
+    }
+    clamp_sound(p);
+}
+static uint32_t sx_begin(uint8_t cmd)
+{
+    uint32_t i;
+    for (i = 0; i < 4u; i++)
+        sx_frame[i] = SX_HEAD[i];
+    sx_frame[4] = cmd;
+    return 5;
+}
+static void sx_reply(uint32_t slot, uint32_t status)
+{
+    uint32_t n = sx_begin(0x05);
+    sx_frame[n++] = (uint8_t)slot;
+    sx_frame[n++] = (uint8_t)status;
+    sx_frame[n++] = 0xF7;
+    (void)plat_sysex_send(sx_frame, n);
+}
+
+/* main loop: the next frames of a list, as many as the computer has room for now */
+static void sx_pump(void)
+{
+    while (sx_next >= 0) {
+        uint32_t n;
+        if (sx_next <= (int32_t)NSLOTS) {
+            uint32_t i = (uint32_t)sx_next;
+            n = sx_begin(0x02);
+            sx_frame[n++] = (uint8_t)i;
+            sx_frame[n++] = (uint8_t)(i == NSLOTS ? 1u : bank.used >> i & 1u);
+            sx_put_sound(sx_frame + n, i == NSLOTS ? set.p : bank.p[i]);
+            n += SX_SOUND;
+        } else {
+            n = sx_begin(0x03);
+            sx_frame[n++] = 1;
+            sx_frame[n++] = NSLOTS;
+        }
+        sx_frame[n++] = 0xF7;
+        if (plat_sysex_room() < n)
+            return;                              /* (the rest at the next frame, as the computer reads) */
+        if (plat_sysex_send(sx_frame, n) != 0) {
+            sx_next = -1;                        /* no computer: the list is dropped */
+            return;
+        }
+        sx_next = sx_next <= (int32_t)NSLOTS ? sx_next + 1 : -1;
+    }
+}
+
+int app_sysex(const uint8_t *p, uint32_t n)      /* the bytes between F0 and F7 */
+{
+    uint32_t slot;
+    if (n < 4 || p[0] != 0x7D || p[1] != 0x42 || p[2] != 0x46)
+        return 0;
+    switch (p[3]) {
+    case 0x01:
+        sx_next = 0;
+        sx_pump();
+        return 1;
+    case 0x04:
+        if (n != 5 + SX_SOUND || p[4] > NSLOTS) {
+            sx_reply(n > 4 ? p[4] : 0x7F, 1);
+            return 1;
+        }
+        slot = p[4];
+        if (slot == NSLOTS) {                    /* the sound being edited */
+            sx_get_sound(p + 5, set.p);
+            set_dirty = 1;
+            app_say("SOUND RECEIVED", "");
+            play_now();
+            sx_reply(slot, 0);
+        } else {
+            sx_get_sound(p + 5, bank.p[slot]);
+            bank.used |= 1u << slot;
+            sx_reply(slot, bank_save() == 0 ? 0u : 2u);
+            app_say("RECEIVED SLOT", "");
+        }
+        ui.redraw = 1;
+        return 1;
+    case 0x06:
+        if (n != 5 || p[4] >= NSLOTS) {
+            sx_reply(n > 4 ? p[4] : 0x7F, 1);
+            return 1;
+        }
+        bank.used &= ~(1u << p[4]);
+        if (set.slot == p[4] + 1u)
+            set.slot = 0;
+        sx_reply(p[4], bank_save() == 0 ? 0u : 2u);
+        ui.redraw = 1;
+        return 1;
+    }
+    return 0;
+}
+
 static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k;
     int32_t e;
     for (k = 0; k < NKEYS; k++) {                /* key 0 is F3 (MIDI 53); C4 plays the sound as made */
         uint32_t bit = 1u << k;
-        if ((keys & bit) && !(ui.keys & bit)) {
+        if ((keys & bit) && !(ui.keys & bit) && (btn & (1u << B_SAVE | 1u << B_SEL))) {
+            int32_t i = key_slot(k);             /* SAVE + a white key: store; SEL + a white key: recall */
+            if (i >= 0 && (btn >> B_SAVE & 1u)) {
+                slot_store((uint32_t)i);
+                ui.save_used = 1;
+            } else if (i >= 0)
+                slot_recall((uint32_t)i);
+        } else if ((keys & bit) && !(ui.keys & bit)) {
             int32_t note = 53 + (int32_t)k + 12 * set.octave;
             play_semitones(note - 60);
             plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)note << 16 | 100u << 24, TO_USB);
@@ -290,15 +513,20 @@ static void input(void)
         else if (k == B_HOME) {
             set.sel = 0;
             ui.redraw = 1;
-        } else if (k == B_SAVE) {
-            if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
-                set_dirty = 0;
-                app_say("SAVED", "");
-            } else {
-                app_say("SAVE", "FAILED");
-            }
+        } else if (k == B_SAVE)
+            ui.save_used = 0;                    /* (it acts on release: a slot may be stored meanwhile) */
+    }
+    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_used) {   /* SAVE tapped: keep the sound */
+        if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
+            set_dirty = 0;
+            app_say("SAVED", "");
+        } else {
+            app_say("SAVE", "FAILED");
         }
     }
+    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && ui.save_used &&
+        plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0)
+        set_dirty = 0;                           /* (a slot stored: the sound and its slot kept too) */
     for (k = 0; k < NE; k++) {
         if ((e = plat_enc((int)k)) == 0)
             continue;
@@ -324,7 +552,8 @@ static void input(void)
     ui.keys = keys;
     ui.btn = btn;
     plat_glow(1);
-    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u), keys);
+    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u),
+              (btn & (1u << B_SAVE | 1u << B_SEL)) ? slot_keys() | keys : keys);   /* SAVE / SEL held: the slots */
 }
 
 void app_input_only(void) { input(); }
@@ -360,7 +589,14 @@ static void draw(void)
     cv_begin(240, 240, K_BG);
     /* the header: the name, the kind of sound, and PLAYING while it plays */
     cv_rect(0, 0, 240, 30, K_BAR);
-    cv_text(10, 5, &FONT_B, APP_NAME, K_BG);
+    r = (uint32_t)cv_text(10, 5, &FONT_B, APP_NAME, K_BG);
+    if (set.slot) {                              /* the slot last stored or recalled */
+        char sl[8] = "SLOT ";
+        sl[5] = (char)(set.slot >= 10 ? '1' : '0' + set.slot);
+        sl[6] = (char)(set.slot >= 10 ? '0' + set.slot - 10 : 0);
+        sl[7] = 0;
+        cv_text((int32_t)r + 10, 10, &FONT_XS, sl, K_TRACK);
+    }
     cv_text(236 - text_w(&FONT_XS, BFXR_GEN_NAMES[set.gen]), 4, &FONT_XS, BFXR_GEN_NAMES[set.gen], K_BG);
     if (ui.playing)
         cv_text(236 - text_w(&FONT_XS, "PLAYING"), 16, &FONT_XS, "PLAYING", K_TRACK);
@@ -382,6 +618,23 @@ static void draw(void)
         else {
             value_bar(128, y + 6, 70, k);
             cv_text(236 - text_w(&FONT_XS, t), y + 3, &FONT_XS, t, on ? K_INK : K_SOFT);
+        }
+    }
+    /* SAVE or SEL held: the 16 slots, as the white keys lie (filled: a sound stored) */
+    if (ui.btn & (1u << B_SAVE | 1u << B_SEL)) {
+        const char *what = (ui.btn >> B_SAVE & 1u) ? "STORE: PRESS A WHITE KEY" : "RECALL: PRESS A WHITE KEY";
+        cv_rect(6, 44, 228, 160, K_BG);
+        cv_rect(6, 44, 228, 1, K_BAR);
+        cv_rect(6, 203, 228, 1, K_BAR);
+        cv_text(120 - text_w(&FONT_XS, what) / 2, 54, &FONT_XS, what, K_INK);
+        for (r = 0; r < NSLOTS; r++) {
+            int32_t x = 12 + (int32_t)(r % 8u) * 27, y = 84 + (int32_t)(r / 8u) * 52;
+            int used = bank.used >> r & 1u, cur = set.slot == r + 1u;
+            char n[3] = {(char)(r + 1 >= 10 ? '1' : '0' + r + 1), (char)(r + 1 >= 10 ? '0' + r + 1 - 10 : 0), 0};
+            if (cur)
+                cv_rect(x - 2, y - 2, 28, 44, K_INK);
+            cv_rect(x, y, 24, 40, used ? K_BAR : K_TRACK);
+            cv_text(x + 12 - text_w(&FONT_XS, n) / 2, y + 12, &FONT_XS, n, used ? K_BG : K_SOFT);
         }
     }
     /* the scroll position */
@@ -426,6 +679,7 @@ void app_frame(void)
 {
     uint32_t now = plat_ms();
     input();
+    sx_pump();
     speak();
     if (ui.playing != bx_playing) {
         ui.playing = bx_playing;
@@ -456,6 +710,10 @@ int app_expect(const char *what, int *got)
         *got = set_dirty;
     else if (!strcmp(what, "playing"))
         *got = bx_playing;
+    else if (!strcmp(what, "slots"))            /* the slots holding a sound, a bit each */
+        *got = (int)bank.used;
+    else if (!strcmp(what, "slot"))
+        *got = set.slot;
     else if (what[0] == 'p' && what[1] >= '0' && what[1] <= '9')   /* pN: parameter N x 100 */
         *got = (int)(set.p[atoi(what + 1) % BP_COUNT] * 100.0f + (set.p[atoi(what + 1) % BP_COUNT] < 0 ? -0.5f : 0.5f));
     else
