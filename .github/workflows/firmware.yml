@@ -30,6 +30,6 @@ jobs:
         app/build/host/bfxr_host app/tests/basic.txt app/build/host
         git clone -q --depth 1 https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
         node tools/gen_ref.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/ref"
-        cc -O2 -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
+        cc -O2 -ffp-contract=off -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
         "$RUNNER_TEMP/check_engine" "$RUNNER_TEMP/ref" || true   # (two TAN cases differ by design: see the file)
       packages: app/build/bfxr*.fwsc

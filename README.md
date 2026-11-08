@@ -24,7 +24,7 @@ USB MIDI in plays the sound too (middle C at its own pitch); the keys send USB M
 
 The engine is bfxr2's classic Bfxr engine, ported line by line to C and played sample by sample (the FM-1 has no room
 for a whole sound in memory). `tools/check_engine.c` plays 336 sounds made by bfxr2's own JavaScript (every wave, every
-kind of sound) and compares: 328 match sample for sample, 6 more match in loudness and pitch (a period one sample
+kind of sound) and compares: 327 match sample for sample, 7 more match in loudness and pitch (a period one sample
 early or late), and 2 differ slightly: the TAN wave through a filter, where the result is decided by rounding.
 
 ## Build

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT
  * The FM-1 engine (app/bfxr.c) against bfxr2's JavaScript, on a computer: every reference sound from
  * tools/gen_ref.js, played by the engine with the same parameters and random seed.
- *   cc -O2 -I base/include -I app -o /tmp/check_engine tools/check_engine.c app/bfxr.c -lm
+ *   cc -O2 -ffp-contract=off -I base/include -I app -o /tmp/check_engine tools/check_engine.c app/bfxr.c -lm
  *   /tmp/check_engine REF_DIR [WAV_DIR]    (WAV_DIR: each case as case_NNNN.wav, the engine's, to listen to)
  * Known difference: the TAN wave through a filter. TAN sends values near 1e16 into the filters, whose output is then
  * decided by rounding (float here, double in JavaScript): the same loudness, a slightly different crackle. */

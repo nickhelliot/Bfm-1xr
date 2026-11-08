@@ -64,6 +64,46 @@ static float rnd_next(uint32_t *st)
 
 static inline float lerpf(float a, float b, float t) { return a + t * (b - a); }
 
+/* float-float arithmetic (Dekker / Knuth; no fused multiply-add, no reassociation: built without fast-math) */
+static inline bfxr_ff_t ff(float a) { bfxr_ff_t r = {a, 0.0f}; return r; }
+static inline bfxr_ff_t ff_quick(float s, float e)
+{
+    bfxr_ff_t r;
+    r.hi = s + e;
+    r.lo = e - (r.hi - s);
+    return r;
+}
+static inline bfxr_ff_t ff_add(bfxr_ff_t x, bfxr_ff_t y)
+{
+    float s = x.hi + y.hi, bb = s - x.hi, e = (x.hi - (s - bb)) + (y.hi - bb);
+    return ff_quick(s, e + x.lo + y.lo);
+}
+static inline void ff_split(float a, float *h, float *l)
+{
+    float c = 4097.0f * a;
+    *h = c - (c - a);
+    *l = a - *h;
+}
+static inline bfxr_ff_t ff_mul(bfxr_ff_t x, bfxr_ff_t y)
+{
+    float p = x.hi * y.hi, ah, al, bh, bl, e;
+    ff_split(x.hi, &ah, &al);
+    ff_split(y.hi, &bh, &bl);
+    e = ((ah * bh - p) + ah * bl + al * bh) + al * bl;
+    return ff_quick(p, e + x.hi * y.lo + x.lo * y.hi);
+}
+static inline bfxr_ff_t ff_div_f(bfxr_ff_t x, float d)   /* x / d */
+{
+    float q = x.hi / d, ph, pl, dh, dl, p, e;
+    ff_split(q, &ph, &pl);
+    ff_split(d, &dh, &dl);
+    p = q * d;
+    e = ((ph * dh - p) + ph * dl + pl * dh) + pl * dl;
+    return ff_quick(q, ((x.hi - p) - e + x.lo) / d);
+}
+static inline int ff_gt(bfxr_ff_t a, bfxr_ff_t b) { return a.hi > b.hi || (a.hi == b.hi && a.lo > b.lo); }
+static inline float ff_f(bfxr_ff_t a) { return a.hi + a.lo; }
+
 /* ------------------------------------------------------------------ the engine (audio interrupt) --- */
 static void clamp_total_length(float *p)
 {
@@ -80,9 +120,9 @@ static void reset(bfxr_voice_t *v, int total)
 {
     float *p = v->p;
     float minf = fm_powf(p[BP_MINFREQ], 0.4f) * p[BP_FREQ];
-    double r2 = 1.0 / v->pitch;                  /* the period scales as 1 / the frequency */
-    v->fps = 100.0 / ((double)p[BP_FREQ] * p[BP_FREQ] + 0.001) * r2;
-    v->fmax = 100.0 / ((double)minf * minf + 0.001) * r2;
+    float r2 = 1.0f / v->pitch;                  /* the period scales as 1 / the frequency */
+    v->fps = ff_div_f(ff(100.0f * r2), p[BP_FREQ] * p[BP_FREQ] + 0.001f);
+    v->fmax = ff_div_f(ff(100.0f * r2), minf * minf + 0.001f);
     v->pj_reached = 0;
     v->pj2_reached = 0;
     if (total) {
@@ -101,7 +141,7 @@ static void reset(bfxr_voice_t *v, int total)
         v->overtone_fall = p[BP_HARM_FALL];
         v->comp = 1 / (1 + 4 * p[BP_COMPRESS]);
         v->filters = p[BP_LPF] != 1.0f || p[BP_HPF] != 0.0f;
-        v->vib_phase = 0;
+        v->vib_phase = ff(0);
         v->vib_speed = p[BP_VIB_SPEED] * p[BP_VIB_SPEED] * 0.01f;
         v->vib_amp = p[BP_VIB_DEPTH] * 0.5f;
         v->env_stage = 0;
@@ -139,12 +179,12 @@ static void reset(bfxr_voice_t *v, int total)
         v->pj2_ts = p[BP_PJ2_ONSET] == 1.0f ? 0 : p[BP_PJ2_ONSET] * win + 32;
         if (v->wave == 9) {                      /* BITNOISE: frequency and cutoff moved up the range */
             float sf = 0.5f + p[BP_FREQ], mf = 0.495f + p[BP_MINFREQ] / 0.99f;
-            v->fps = 100.0 / ((double)sf * sf + 0.001) * r2;
-            v->fmax = 100.0 / ((double)mf * mf + 0.001) * r2;
+            v->fps = ff_div_f(ff(100.0f * r2), sf * sf + 0.001f);
+            v->fmax = ff_div_f(ff(100.0f * r2), mf * mf + 0.001f);
         }
     }
-    v->slide = 1.0 - (double)p[BP_SLIDE] * p[BP_SLIDE] * p[BP_SLIDE] * 0.01;
-    v->accel = -(double)p[BP_DSLIDE] * p[BP_DSLIDE] * p[BP_DSLIDE] * 0.000001;
+    v->slide = ff_add(ff(1.0f), ff(-p[BP_SLIDE] * p[BP_SLIDE] * p[BP_SLIDE] * 0.01f));   /* (1 - x, kept exact) */
+    v->accel = ff(-p[BP_DSLIDE] * p[BP_DSLIDE] * p[BP_DSLIDE] * 0.000001f);
     v->flanger_offset = p[BP_FLANGE_OFF] * p[BP_FLANGE_OFF] * 1020.0f;
     if (p[BP_FLANGE_OFF] < 0)
         v->flanger_offset = -v->flanger_offset;
@@ -210,38 +250,49 @@ static float one_sample(bfxr_voice_t *v)
     if (v->pj_cur >= v->pj_repeat_len) {
         v->pj_cur = 0;
         if (v->pj_reached) {
-            v->fps /= (double)v->pj_amt;
+            v->fps = ff_div_f(v->fps, v->pj_amt);
             v->pj_reached = 0;
         }
         if (v->pj2_reached) {
-            v->fps /= (double)v->pj2_amt;
+            v->fps = ff_div_f(v->fps, v->pj2_amt);
             v->pj2_reached = 0;
         }
     }
     if (!v->pj_reached && v->pj_cur >= v->pj_ts) {
         v->pj_reached = 1;
-        v->fps *= (double)v->pj_amt;
+        v->fps = ff_mul(v->fps, ff(v->pj_amt));
     }
     if (!v->pj2_reached && v->pj_cur >= v->pj2_ts) {
-        v->fps *= (double)v->pj2_amt;
+        v->fps = ff_mul(v->fps, ff(v->pj2_amt));
         v->pj2_reached = 1;
     }
-    v->slide += v->accel;
-    v->fps *= v->slide;
-    if (v->fps > v->fmax) {
+    v->slide = ff_add(v->slide, v->accel);
+    v->fps = ff_mul(v->fps, v->slide);
+    if (ff_gt(v->fps, v->fmax)) {
         v->fps = v->fmax;
         if (v->min_freq > 0)
             v->muted = 1;
     }
     {
-        double pd = v->fps;
+        bfxr_ff_t pd = v->fps;
+        float pf;
         if (v->vib_amp > 0) {
-            v->vib_phase += v->vib_speed;
-            if (v->vib_phase >= 6.283185307179586)   /* (sin is periodic: a small angle keeps the float's precision) */
-                v->vib_phase -= 6.283185307179586;
-            pd = v->fps * (1.0 + (double)fm_sinf((float)v->vib_phase) * v->vib_amp);
+            static const bfxr_ff_t TWO_PI_FF = {6.28318548f, -1.74845553e-7f};
+            v->vib_phase = ff_add(v->vib_phase, ff(v->vib_speed));
+            if (v->vib_phase.hi >= 6.28318531f)  /* (sin is periodic: a small angle keeps the float's precision) */
+                v->vib_phase = ff_add(v->vib_phase, (bfxr_ff_t){-TWO_PI_FF.hi, -TWO_PI_FF.lo});
+            pd = ff_mul(v->fps, ff_add(ff(1.0f), ff(fm_sinf(ff_f(v->vib_phase)) * v->vib_amp)));
         }
-        v->period = pd < 8.0 ? 8 : pd > 1.0e7 ? 10000000 : (int32_t)pd;   /* (real periods stay under ~1e6) */
+        pf = pd.hi;
+        if (pf < 8.0f)
+            v->period = 8;
+        else if (pf > 1.0e7f)                     /* (real periods stay under ~1e6) */
+            v->period = 10000000;
+        else {
+            int32_t ip = (int32_t)pf;            /* floor of hi + lo: hi rounds, lo says which side */
+            float frac = (pf - (float)ip) + pd.lo;
+            v->period = frac < 0 ? ip - 1 : frac >= 1.0f ? ip + 1 : ip;
+        }
     }
     if (v->wave == 0) {
         v->duty += v->duty_sweep;

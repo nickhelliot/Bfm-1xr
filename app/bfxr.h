@@ -35,6 +35,10 @@ void bfxr_mutate(bfxr_sound_t *s);
 void bfxr_set(bfxr_sound_t *s, uint32_t k, float v); /* clamped to the parameter's range (the wave: rounded) */
 void bfxr_seed(uint32_t seed);                       /* the generators' random numbers */
 
+/* a float-float number (hi + lo, ~48 bits): the FM-1's compiler has no double, and the sums made every sample (the
+ * period and its slide, the vibrato's phase) drift audibly in a plain float */
+typedef struct { float hi, lo; } bfxr_ff_t;
+
 /* a playing sound: started and rendered by the audio interrupt only */
 typedef struct {
     float p[BP_COUNT];           /* the sound's parameters as played (the engine adjusts the envelope's) */
@@ -44,7 +48,7 @@ typedef struct {
     float pitch;                 /* playback frequency ratio (keys: 2^(semitones / 12)) */
     float onebit, master_vol, punch, min_freq, overtones, overtone_fall, comp;
     float vib_speed, vib_amp, env_time, len0, len1, len2, stage_len, full_len, bc_sweep, bc_phase, bc_last;
-    double fps, fmax, slide, accel, vib_phase;   /* per-sample sums: double, as in JavaScript (a float drifts) */
+    bfxr_ff_t fps, fmax, slide, accel, vib_phase;   /* per-sample sums: float-float, near JavaScript's double */
     float over0, over1, over2, flanger_delta, flanger_offset, pj_repeat_len, pj_amt, pj2_amt, pj_cur;
     float pj_ts, pj2_ts, bc_freq, duty, duty_sweep, lp_cut, lp_delta, lp_damp, lp_pos, lp_dpos;
     float hp_pos, hp_cut, hp_delta, reset_period, reset_cur, n, length;
