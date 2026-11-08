@@ -1,27 +1,31 @@
-Firmware · YML
-name: Build firmware
- 
-on:
-  workflow_dispatch:
-  push:
-    branches: [main, 'claude/**']
-    tags: ['v[0-9]*']
- 
-permissions: {}
- 
-jobs:
-  firmware:
-    uses: zvenson/fm1-build/.github/workflows/build.yml@v1
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    with:
-      sdk: true
-      build: |
-        set -euo pipefail
-        # the shared builder checks out without submodules: engines and the hardware layer are submodules
-        git submodule update --init --depth 1
-        python3 -m pip install fonttools
-        ./build.sh
-      packages: build/*.fwsc
+{
+ "name": "Build firmware",
+ "on": {
+  "workflow_dispatch": null,
+  "push": {
+   "branches": [
+    "main",
+    "claude/**"
+   ],
+   "tags": [
+    "v[0-9]*"
+   ]
+  }
+ },
+ "permissions": {},
+ "jobs": {
+  "firmware": {
+   "uses": "zvenson/fm1-build/.github/workflows/build.yml@v1",
+   "permissions": {
+    "contents": "write",
+    "id-token": "write",
+    "attestations": "write"
+   },
+   "with": {
+    "sdk": true,
+    "build": "set -euo pipefail\n# the shared builder checks out without submodules: engines and the hardware layer are submodules\ngit submodule update --init --depth 1\npython3 -m pip install fonttools\n./build.sh",
+    "packages": "build/*.fwsc"
+   }
+  }
+ }
+}
