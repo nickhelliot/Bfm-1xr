@@ -277,3 +277,35 @@ expect poc 1
 expect voices 4
 expect startup 0
 expect midich 0
+# --- FX shakes the screen, EDIT fires an energy ball across the header
+wait 2000
+tap FX
+wait 60
+expect anim 1
+shot shake.png
+wait 400
+expect anim 0
+tap EDIT
+wait 180
+expect anim 2
+shot shot.png
+wait 500
+expect anim 0
+# --- GLO > PALETTE: 20 of them, seen at once, kept
+tap GLO
+turn SELECT 5
+turn K1 3
+wait 30
+expect palette 3
+tap GLO
+wait 30
+reboot
+wait 1700
+expect palette 3
+tap GLO
+turn SELECT 5
+turn K1 -3
+wait 30
+tap GLO
+wait 30
+expect palette 0

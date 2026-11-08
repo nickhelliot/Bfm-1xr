@@ -41,8 +41,8 @@ Press any key or button to skip it. **GLO → START-UP** turns the sound or the 
 | Control | What it does |
 | --- | --- |
 | **PRESET** | Picks a kind of sound and makes a new one, then plays it: PICKUP/COIN, LASER/SHOOT, EXPLOSION, POWERUP, HIT/HURT, JUMP, BLIP/SELECT, RANDOMIZE. Each click is a fresh sound |
-| **EDIT** | Another new sound of the same kind. Press it until you hear one you like |
-| **FX** | Mutate: nudges the sound a little in a random direction (and sometimes changes the wave) |
+| **EDIT** | Another new sound of the same kind (an energy ball flies across the top of the screen). Press it until you hear one you like |
+| **FX** | Mutate: nudges the sound a little in a random direction, and sometimes changes the wave. The screen shakes |
 | **SELECT** | Scrolls the list. The four highlighted rows move with it |
 | **K1 to K4** | Change the four highlighted rows. Turn slowly for fine steps (1 % of the range), fast for bigger ones |
 | **ALGO** | Changes the wave, from anywhere in the list |
@@ -78,8 +78,11 @@ work while the settings are open.
 | FAST KNOBS | A fast turn moves 3 steps a click instead of 1 | ON |
 | START-UP | ANIM + SOUND, ANIMATION (silent), or OFF | ANIM + SOUND |
 | MIDI IN | The MIDI channel BFMXR plays from: all, or one of 1 to 16 | ALL CHANNELS |
+| PALETTE | The screen's colours, 20 to choose from: BFXR, NIGHT, POCKET, CGA, AMBER, MINT, OCEAN, SUNSET, BUBBLEGUM, MONO, PAPER, HI-CON, VAPOR, FOREST, LAVA, ICE, CANDY, 8-BIT, BREADBIN, MIDNIGHT. Each changes the screen at once | BFXR |
 
 ![The settings](docs/menu.png)
+
+![The 20 palettes](docs/palettes.png)
 
 ## Making a sound
 

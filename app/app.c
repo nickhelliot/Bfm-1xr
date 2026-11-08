@@ -13,20 +13,54 @@
  *   SAVE            keep the sound (it is back at the next power-on); MASTER the volume
  *   SAVE + a white key   store the sound in that slot (16 slots, one a white key)
  *   SEL + a white key    recall the slot's sound and play it
- *   GLO             the settings: play on change, voices, fast knobs, start-up, MIDI in channel
+ *   GLO             the settings: play on change, voices, fast knobs, start-up, MIDI in channel, palette
  * The slots go to and from a computer over USB SysEx (the site's Library page): see "the slots over USB" below. */
 #include "fastmath.h"
 #include "bfxr.h"
 #include "splash_data.h"                         /* the start-up animation and sound (tools/gen_splash.py) */
 
 /* the colours: bfxr2's tan ground, cream, maroon */
-#define K_BG RGB(231, 209, 167)
-#define K_ROW RGB(214, 194, 158)
-#define K_TRACK RGB(204, 189, 161)
-#define K_INK RGB(30, 16, 12)
-#define K_LABEL RGB(94, 48, 40)
-#define K_BAR RGB(102, 57, 49)
-#define K_SOFT RGB(147, 116, 98)
+/* the palettes (GLO > PALETTE): ground, row, track, ink, label, accent, soft; the row, track and soft blended from the
+ * ground and the ink. Each checked for contrast (WCAG): ink on the ground >= 7, labels >= 4.5, the ground's colour on
+ * the accent (the header) >= 3, the accent on a row (a selected value) >= 3 */
+typedef struct { const char *name; uint16_t c[7]; } kpal_t;
+static const kpal_t KPALS[] = {
+    {"BFXR", {0xE694, 0xD613, 0xC591, 0x1881, 0x5985, 0x5985, 0x7B2A}},
+    {"NIGHT", {0x0862, 0x2104, 0x3186, 0xEF7E, 0xAD57, 0x7D5F, 0x8C51}},
+    {"POCKET", {0xC70A, 0xB689, 0xA608, 0x08E1, 0x1A23, 0x1A23, 0x5BA5}},
+    {"CGA", {0x0000, 0x10A2, 0x2945, 0xFFFF, 0x57FF, 0xFABF, 0x8C71}},
+    {"AMBER", {0x1060, 0x20C1, 0x3942, 0xFDEB, 0xD467, 0xFCA3, 0x9366}},
+    {"MINT", {0xE7BD, 0xD73B, 0xC6B9, 0x1184, 0x2B09, 0x13CB, 0x6C4F}},
+    {"OCEAN", {0x08C5, 0x1947, 0x29C9, 0xDF7F, 0x85BB, 0x3D5E, 0x7C74}},
+    {"SUNSET", {0x2885, 0x3906, 0x4988, 0xFF19, 0xF511, 0xFB6A, 0x9C30}},
+    {"BUBBLEGUM", {0xFEFD, 0xEE7B, 0xE5F9, 0x3845, 0x914C, 0xD150, 0x9350}},
+    {"MONO", {0x0000, 0x10A2, 0x2945, 0xFFFF, 0xAD55, 0xCE59, 0x8C71}},
+    {"PAPER", {0xF79D, 0xE71A, 0xD698, 0x18E3, 0x5AAA, 0x2945, 0x7BEE}},
+    {"HI-CON", {0x0000, 0x10A2, 0x2945, 0xFFFF, 0xFF40, 0xFF40, 0x8C71}},
+    {"VAPOR", {0x1846, 0x28E8, 0x416A, 0xF73F, 0x7EFE, 0xFAD9, 0x9414}},
+    {"FOREST", {0x1102, 0x2184, 0x3206, 0xE77A, 0xAE51, 0x7DEB, 0x848F}},
+    {"LAVA", {0x1840, 0x28C2, 0x3965, 0xFF7B, 0xF4AC, 0xFA83, 0x942F}},
+    {"ICE", {0xEF9F, 0xD71D, 0xC69B, 0x08E5, 0x32D0, 0x1B75, 0x73F1}},
+    {"CANDY", {0xFFDB, 0xEF3A, 0xE6B8, 0x38A8, 0x79F1, 0x9159, 0x93D1}},
+    {"8-BIT", {0x0000, 0x10A2, 0x2945, 0xFFFF, 0x3DFF, 0xE00B, 0x8C51}},
+    {"BREADBIN", {0x4190, 0x4A11, 0x5A73, 0xE73F, 0xB5BE, 0xA4BF, 0x9CB9}},
+    {"MIDNIGHT", {0x0043, 0x10C5, 0x2167, 0xD6FF, 0x8CB9, 0xFE4A, 0x73F2}},
+};
+#define NPALS ((uint32_t)(sizeof KPALS / sizeof KPALS[0]))
+static uint16_t kc[7];
+#define K_BG kc[0]
+#define K_ROW kc[1]
+#define K_TRACK kc[2]
+#define K_INK kc[3]
+#define K_LABEL kc[4]
+#define K_BAR kc[5]
+#define K_SOFT kc[6]
+static void pal_apply(uint32_t i)
+{
+    uint32_t k;
+    for (k = 0; k < 7u; k++)
+        kc[k] = KPALS[i % NPALS].c[k];
+}
 
 #define SET_MAGIC 0x42465831u            /* "BFX1": the settings record; another magic loads a fresh sound */
 typedef struct {
@@ -42,7 +76,8 @@ typedef struct {
     uint8_t fast_knobs;                  /* 1: a fast turn moves 3x */
     uint8_t startup;                     /* 0 animation and sound, 1 animation only, 2 off */
     uint8_t midi_ch;                     /* MIDI in: 0 every channel, 1 .. 16 one */
-    uint8_t cfg_rsv[3];
+    uint8_t palette;                     /* KPALS */
+    uint8_t cfg_rsv[2];
 } settings_t;
 #define SET_OLD_SIZE ((uint32_t)__builtin_offsetof(settings_t, play_on_change))   /* the record before the menu's settings */
 static settings_t set;
@@ -194,7 +229,8 @@ static void cfg_defaults(void)
     set.fast_knobs = 1;
     set.startup = 0;
     set.midi_ch = 0;
-    set.cfg_rsv[0] = set.cfg_rsv[1] = set.cfg_rsv[2] = 0;
+    set.palette = 0;
+    set.cfg_rsv[0] = set.cfg_rsv[1] = 0;
 }
 
 static void settings_fresh(void)
@@ -222,7 +258,13 @@ static void clamp_sound(float *p)                /* a stored or received sound, 
     }
 }
 
+static void app_init_settings(void);
 void app_init(void)
+{
+    app_init_settings();
+    pal_apply(set.palette);
+}
+static void app_init_settings(void)
 {
     uint32_t k;
     app_panic();                                 /* (silence: a restart in the simulator keeps the old RAM) */
@@ -243,7 +285,7 @@ void app_init(void)
     }
     clamp_sound(set.p);
     if (set.play_on_change > 1u || set.voices < 1u || set.voices > NVOICES || set.fast_knobs > 1u ||
-        set.startup > 2u || set.midi_ch > 16u)
+        set.startup > 2u || set.midi_ch > 16u || set.palette >= NPALS)
         cfg_defaults();
 }
 
@@ -270,6 +312,7 @@ static struct {
     int32_t playing;                    /* as last drawn */
     uint8_t save_used;                   /* SAVE is held and a white key stored a slot: no plain save on release */
     uint8_t menu, menu_row;              /* the GLO menu is open; its row */
+    uint32_t shake_t0, shot_t0;          /* FX's screen shake, EDIT's energy ball: when they began (0: none) */
     uint8_t redraw;
 } ui;
 
@@ -697,8 +740,9 @@ int app_sysex(const uint8_t *p, uint32_t n)      /* the bytes between F0 and F7 
 /* ------------------------------------------------------------- the GLO menu --- */
 /* GLO opens and closes it (HOME closes it too): SELECT picks a row, K1 or ALGO changes it. Closing keeps the settings
  * (with the sound, as SAVE does). The keys, PLAY and the octave work as ever meanwhile. */
-enum { MENU_POC, MENU_VOICES, MENU_FAST, MENU_STARTUP, MENU_MIDI, MENU_ROWS };
-static const char *const MENU_LABEL[MENU_ROWS] = {"PLAY ON CHANGE", "VOICES", "FAST KNOBS", "START-UP", "MIDI IN"};
+enum { MENU_POC, MENU_VOICES, MENU_FAST, MENU_STARTUP, MENU_MIDI, MENU_PALETTE, MENU_ROWS };
+static const char *const MENU_LABEL[MENU_ROWS] = {"PLAY ON CHANGE", "VOICES", "FAST KNOBS", "START-UP", "MIDI IN",
+                                                  "PALETTE"};
 
 static void menu_value(uint32_t row, char *t)
 {
@@ -713,6 +757,7 @@ static void menu_value(uint32_t row, char *t)
         break;
     case MENU_FAST: text_cat(t, set.fast_knobs ? "ON" : "OFF"); break;
     case MENU_STARTUP: text_cat(t, SU[set.startup % 3u]); break;
+    case MENU_PALETTE: text_cat(t, KPALS[set.palette % NPALS].name); break;
     default:
         if (!set.midi_ch)
             text_cat(t, "ALL CHANNELS");
@@ -741,6 +786,10 @@ static void menu_change(int32_t e)
     case MENU_VOICES: set.voices = (uint8_t)clamp((int32_t)set.voices + d, 1, NVOICES); break;
     case MENU_FAST: set.fast_knobs ^= 1u; break;
     case MENU_STARTUP: set.startup = (uint8_t)wrapi((int32_t)set.startup + d, 0, 2); break;
+    case MENU_PALETTE:
+        set.palette = (uint8_t)wrapi((int32_t)set.palette + d, 0, (int32_t)NPALS - 1);
+        pal_apply(set.palette);                  /* (seen at once) */
+        break;
     default: set.midi_ch = (uint8_t)wrapi((int32_t)set.midi_ch + d, 0, 16); break;
     }
     set_dirty = 1;
@@ -799,8 +848,10 @@ static void input(void)
             continue;                            /* (the menu open: the rest wait) */
         if (k == B_PLAY)
             play_now();
-        else if (k == B_EDIT)
+        else if (k == B_EDIT) {
             generate(set.gen);
+            ui.shot_t0 = plat_ms() | 1u;         /* an energy ball across the header */
+        }
         else if (k == B_FX) {
             bfxr_sound_t s;
             sound_get(&s);
@@ -808,6 +859,7 @@ static void input(void)
             bfxr_mutate(&s);
             sound_put(&s);
             app_say("MUTATED", "");
+            ui.shake_t0 = plat_ms() | 1u;        /* the screen shakes */
             play_now();
         } else if (k == B_OCTDN)
             octave_step(-1);
@@ -898,6 +950,52 @@ static void value_bar(int32_t x, int32_t y, int32_t w, uint32_t k)
     }
 }
 
+/* ------------------------------------------------------------ the animations --- */
+#define SHAKE_MS 280u
+#define SHOT_MS 450u
+/* EDIT's energy ball: 12 x 8 pixels drawn 2 x 2, two frames of its flickering tail. . none, d deep, b blue,
+ * c cyan, w white */
+static const char *const SHOT[2][8] = {
+    {"...ddddbb...", ".dddbbbccbb.", "d.dbbccwwcb.", ".ddbccwwwwcb", "d.dbccwwwwcb", ".ddbbccwwcb.",
+     "..ddbbbccbb.", ".d..dddbb..."},
+    {"..d.ddbbb...", "d.ddbbbccbb.", ".ddbbccwwcb.", "dddbccwwwwcb", ".ddbccwwwwcb", "d.dbbccwwcb.",
+     ".dddbbbccbb.", "....ddddb..."}};
+
+static void draw_shot(uint32_t ms)               /* across the header, left to right */
+{
+    uint32_t r, c, f = (ms / 50u) & 1u;
+    int32_t x0 = -24 + (int32_t)(ms * 288u / SHOT_MS), y0 = 7;
+    for (r = 0; r < 8u; r++)
+        for (c = 0; c < 12u; c++) {
+            char ch = SHOT[f][r][c];
+            uint16_t col = ch == 'w' ? RGB(255, 255, 255) : ch == 'c' ? RGB(120, 230, 255) :
+                           ch == 'b' ? RGB(40, 130, 255) : ch == 'd' ? RGB(20, 50, 190) : 0;
+            int32_t x = x0 + 2 * (int32_t)c;
+            if (col && x >= 0 && x < 239)
+                cv_rect(x, y0 + 2 * (int32_t)r, 2, 2, col);
+        }
+    for (c = 0; c < 4u; c++) {                   /* sparks left behind */
+        int32_t x = x0 - 6 - (int32_t)c * 9 - (int32_t)((ms / 30u + c * 7u) % 5u);
+        int32_t y = y0 + 2 + (int32_t)((ms / 40u + c * 3u) % 12u);
+        if (x >= 0 && x < 238)
+            cv_rect(x, y, 2, 2, c & 1u ? RGB(120, 230, 255) : RGB(40, 130, 255));
+    }
+}
+
+static void shake_canvas(uint32_t ms)            /* the whole picture moved a few pixels, the wobble dying away */
+{
+    int32_t a = (int32_t)(6u * (SHAKE_MS - ms) / SHAKE_MS), k = (int32_t)(ms / 35u);
+    int32_t dx = (k & 1) ? a : -a, dy = (k & 2) ? a / 2 : -(a / 2), x, y;
+    uint16_t bg = swap16(K_BG);
+    if (!dx && !dy)
+        return;
+    for (y = dy > 0 ? 239 : 0; dy > 0 ? y >= 0 : y < 240; y += dy > 0 ? -1 : 1)
+        for (x = dx > 0 ? 239 : 0; dx > 0 ? x >= 0 : x < 240; x += dx > 0 ? -1 : 1) {
+            int32_t sx = x - dx, sy = y - dy;
+            cv_px[y * 240 + x] = (sx >= 0 && sx < 240 && sy >= 0 && sy < 240) ? cv_px[sy * 240 + sx] : bg;
+        }
+}
+
 #define ROWS 9
 #define ROW_H 20
 #define LIST_Y 34
@@ -916,11 +1014,11 @@ static void draw(void)
         sl[5] = (char)(set.slot >= 10 ? '1' : '0' + set.slot);
         sl[6] = (char)(set.slot >= 10 ? '0' + set.slot - 10 : 0);
         sl[7] = 0;
-        cv_text((int32_t)r + 10, 10, &FONT_XS, sl, K_TRACK);
+        cv_text((int32_t)r + 10, 10, &FONT_XS, sl, K_BG);
     }
     cv_text(236 - text_w(&FONT_XS, BFXR_GEN_NAMES[set.gen]), 4, &FONT_XS, BFXR_GEN_NAMES[set.gen], K_BG);
     if (ui.playing)
-        cv_text(236 - text_w(&FONT_XS, "PLAYING"), 16, &FONT_XS, "PLAYING", K_TRACK);
+        cv_text(236 - text_w(&FONT_XS, "PLAYING"), 16, &FONT_XS, "PLAYING", K_BG);
     /* the parameters: the four K1 .. K4 change are marked */
     for (r = 0; r < ROWS; r++) {
         uint32_t k = (uint32_t)top + r;
@@ -946,7 +1044,7 @@ static void draw(void)
         cv_rect(0, 32, 240, 182, K_BG);
         cv_text(10, 40, &FONT_B, "SETTINGS", K_BAR);
         for (r = 0; r < MENU_ROWS; r++) {
-            int32_t y = 66 + (int32_t)r * 26;
+            int32_t y = 64 + (int32_t)r * 22;
             int on = r == ui.menu_row;
             if (on)
                 cv_rect(0, y - 3, 240, 22, K_ROW);
@@ -987,6 +1085,10 @@ static void draw(void)
         text_cat(t, o);
         cv_text(8, 222, &FONT_XS, t, K_SOFT);
     }
+    if (ui.shot_t0 && now - ui.shot_t0 < SHOT_MS)
+        draw_shot(now - ui.shot_t0);
+    if (ui.shake_t0 && now - ui.shake_t0 < SHAKE_MS)
+        shake_canvas(now - ui.shake_t0);
     cv_blit(0, 0);
 }
 
@@ -1033,6 +1135,13 @@ void app_frame(void)
         ui.playing = bx_playing;
         ui.redraw = 1;
     }
+    if (ui.shot_t0 || ui.shake_t0) {             /* an animation: a picture every frame until it ends */
+        if (ui.shot_t0 && now - ui.shot_t0 >= SHOT_MS)
+            ui.shot_t0 = 0;
+        if (ui.shake_t0 && now - ui.shake_t0 >= SHAKE_MS)
+            ui.shake_t0 = 0;
+        ui.redraw = 1;
+    }
     if (ui.msg_until && now >= ui.msg_until) {
         ui.msg_until = 0;
         ui.redraw = 1;
@@ -1076,6 +1185,10 @@ int app_expect(const char *what, int *got)
         *got = set.startup;
     else if (!strcmp(what, "midich"))
         *got = set.midi_ch;
+    else if (!strcmp(what, "palette"))
+        *got = set.palette;
+    else if (!strcmp(what, "anim"))              /* 1 shake, 2 energy ball, 3 both */
+        *got = (ui.shake_t0 ? 1 : 0) | (ui.shot_t0 ? 2 : 0);
     else if (what[0] == 'p' && what[1] >= '0' && what[1] <= '9')   /* pN: parameter N x 100 */
         *got = (int)(set.p[atoi(what + 1) % BP_COUNT] * 100.0f + (set.p[atoi(what + 1) % BP_COUNT] < 0 ? -0.5f : 0.5f));
     else
