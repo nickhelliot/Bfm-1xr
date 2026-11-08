@@ -36,13 +36,13 @@ static uint8_t set_dirty;
 
 /* ------------------------------------------------------------------ sound --- */
 /* the main loop asks for a sound (the parameters in set.p, a pitch); the audio interrupt starts it */
-static bfxr_voice_t voice;
-static float abuf[APP_BLOCK];
+static bfxr_voice_t bx_voice;
+static float bx_buf[APP_BLOCK];
 static volatile uint32_t trig_seq, trig_done;
 static volatile float trig_pitch = 1.0f;
-static volatile int32_t playing;
-static uint32_t voice_seed = 0x2545F491u;
-static float gain_now;
+static volatile int32_t bx_playing;
+static uint32_t bx_seed = 0x2545F491u;
+static float bx_gain;
 
 static void play_semitones(int32_t st)
 {
@@ -71,17 +71,17 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         trig_done = trig_seq;
         for (i = 0; i < BP_COUNT; i++)
             s.p[i] = set.p[i];
-        voice_seed = voice_seed * 1664525u + 1013904223u;
-        bfxr_start(&voice, &s, trig_pitch, voice_seed);
+        bx_seed = bx_seed * 1664525u + 1013904223u;
+        bfxr_start(&bx_voice, &s, trig_pitch, bx_seed);
     }
     if (n > APP_BLOCK)
         n = APP_BLOCK;
-    bfxr_render(&voice, abuf, n);
-    playing = voice.active;
+    bfxr_render(&bx_voice, bx_buf, n);
+    bx_playing = bx_voice.active;
     for (i = 0; i < n; i++) {
         int32_t s;
-        gain_now += (gain - gain_now) * 0.004f;              /* ~5 ms: turning MASTER does not click */
-        s = (int32_t)(abuf[i] * gain_now);
+        bx_gain += (gain - bx_gain) * 0.004f;              /* ~5 ms: turning MASTER does not click */
+        s = (int32_t)(bx_buf[i] * bx_gain);
         lr[2 * i] = s;
         lr[2 * i + 1] = s;
     }
@@ -89,7 +89,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 
 void app_panic(void)
 {
-    voice.active = 0;
+    bx_voice.active = 0;
     trig_done = trig_seq;
 }
 
@@ -142,7 +142,7 @@ static struct {
     uint32_t msg_until;
     uint32_t keys, btn;
     uint32_t edit_at;                    /* a parameter changed: played once the knobs rest */
-    int32_t playing;
+    int32_t playing;                    /* as last drawn */
     uint8_t redraw;
 } ui;
 
@@ -324,7 +324,7 @@ static void input(void)
     ui.keys = keys;
     ui.btn = btn;
     plat_glow(1);
-    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (playing ? LED_PLAY_GREEN : 0u), keys);
+    plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u), keys);
 }
 
 void app_input_only(void) { input(); }
@@ -429,8 +429,8 @@ void app_frame(void)
     uint32_t now = plat_ms();
     input();
     speak();
-    if (ui.playing != playing) {
-        ui.playing = playing;
+    if (ui.playing != bx_playing) {
+        ui.playing = bx_playing;
         ui.redraw = 1;
     }
     if (ui.msg_until && now >= ui.msg_until) {
@@ -457,7 +457,7 @@ int app_expect(const char *what, int *got)
     else if (!strcmp(what, "dirty"))
         *got = set_dirty;
     else if (!strcmp(what, "playing"))
-        *got = playing;
+        *got = bx_playing;
     else if (what[0] == 'p' && what[1] >= '0' && what[1] <= '9')   /* pN: parameter N x 100 */
         *got = (int)(set.p[atoi(what + 1) % BP_COUNT] * 100.0f + (set.p[atoi(what + 1) % BP_COUNT] < 0 ? -0.5f : 0.5f));
     else
