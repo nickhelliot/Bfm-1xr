@@ -1,0 +1,31 @@
+ Builds the firmware package (build/felucca.fwsc) on GitHub with the shared FM-1 builder
+# (https://github.com/zvenson/fm1-build), which installs JieLi's Linux toolchain and AC79 SDK.
+# Run it from the Actions tab ("Run workflow"), on a push to a branch, or push a tag like v0.1.0 to publish a release.
+# The finished package is in the run's "packages" artifact.
+name: Build firmware
+ 
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v[0-9]*']
+ 
+permissions: {}
+ 
+jobs:
+  firmware:
+    uses: zvenson/fm1-build/.github/workflows/build.yml@v1
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    with:
+      sdk: true
+      build: |
+        set -euo pipefail
+        # the shared builder checks out without submodules: engines and the hardware layer are submodules
+        git submodule update --init --depth 1
+        python3 -m pip install fonttools
+        ./build.sh
+      packages: build/*.fwsc
+ 
