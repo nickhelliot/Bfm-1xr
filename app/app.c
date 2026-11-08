@@ -392,12 +392,10 @@ static void draw(void)
         int32_t x = cv_text(8, 222, &FONT_XS, ui.msg[0], K_INK);
         cv_text(x + 8, 222, &FONT_XS, ui.msg[1], K_BAR);
     } else {
+        char o[3] = {set.octave < 0 ? '-' : '+', (char)('0' + (set.octave < 0 ? -set.octave : set.octave)), 0};
         t[0] = 0;
         text_cat(t, "EDIT NEW  FX MUTATE  OCT ");
-        r = (uint32_t)strlen(t);
-        t[r] = set.octave < 0 ? '-' : '+';
-        t[r + 1] = (char)('0' + (set.octave < 0 ? -set.octave : set.octave));
-        t[r + 2] = 0;
+        text_cat(t, o);
         cv_text(8, 222, &FONT_XS, t, K_SOFT);
     }
     cv_blit(0, 0);
