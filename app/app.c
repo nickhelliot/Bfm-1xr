@@ -349,12 +349,12 @@ static void slot_recall(uint32_t i)
  *                      05 SLOT STATUS           0 done, 1 refused (a bad slot or length), 2 the flash write failed
  * SOUND: the 32 parameters in bfxr.h's order, each a float's 32 bits in five 7-bit bytes, low bits first (160 bytes).
  * The FM-1 sends a list a frame at a time as the computer reads (app_frame). */
-#define SX_SOUND (BP_COUNT * 5u)
-static const uint8_t SX_HEAD[4] = {0xF0, 0x7D, 0x42, 0x46};
-static uint8_t sx_frame[8 + SX_SOUND];
-static int32_t sx_next = -1;                     /* the list being sent: the next slot (-1 none, NSLOTS + 1 the end) */
+#define BSX_SOUND (BP_COUNT * 5u)
+static const uint8_t BSX_HEAD[4] = {0xF0, 0x7D, 0x42, 0x46};
+static uint8_t bsx_frame[8 + BSX_SOUND];
+static int32_t bsx_next = -1;                     /* the list being sent: the next slot (-1 none, NSLOTS + 1 the end) */
 
-static void sx_put_sound(uint8_t *d, const float *p)
+static void bsx_put_sound(uint8_t *d, const float *p)
 {
     uint32_t k;
     for (k = 0; k < BP_COUNT; k++) {
@@ -367,7 +367,7 @@ static void sx_put_sound(uint8_t *d, const float *p)
         d[5 * k + 4] = (uint8_t)(b.u >> 28 & 0x0Fu);
     }
 }
-static void sx_get_sound(const uint8_t *d, float *p)
+static void bsx_get_sound(const uint8_t *d, float *p)
 {
     uint32_t k;
     for (k = 0; k < BP_COUNT; k++) {
@@ -378,48 +378,48 @@ static void sx_get_sound(const uint8_t *d, float *p)
     }
     clamp_sound(p);
 }
-static uint32_t sx_begin(uint8_t cmd)
+static uint32_t bsx_begin(uint8_t cmd)
 {
     uint32_t i;
     for (i = 0; i < 4u; i++)
-        sx_frame[i] = SX_HEAD[i];
-    sx_frame[4] = cmd;
+        bsx_frame[i] = BSX_HEAD[i];
+    bsx_frame[4] = cmd;
     return 5;
 }
-static void sx_reply(uint32_t slot, uint32_t status)
+static void bsx_reply(uint32_t slot, uint32_t status)
 {
-    uint32_t n = sx_begin(0x05);
-    sx_frame[n++] = (uint8_t)slot;
-    sx_frame[n++] = (uint8_t)status;
-    sx_frame[n++] = 0xF7;
-    (void)plat_sysex_send(sx_frame, n);
+    uint32_t n = bsx_begin(0x05);
+    bsx_frame[n++] = (uint8_t)slot;
+    bsx_frame[n++] = (uint8_t)status;
+    bsx_frame[n++] = 0xF7;
+    (void)plat_sysex_send(bsx_frame, n);
 }
 
 /* main loop: the next frames of a list, as many as the computer has room for now */
-static void sx_pump(void)
+static void bsx_pump(void)
 {
-    while (sx_next >= 0) {
+    while (bsx_next >= 0) {
         uint32_t n;
-        if (sx_next <= (int32_t)NSLOTS) {
-            uint32_t i = (uint32_t)sx_next;
-            n = sx_begin(0x02);
-            sx_frame[n++] = (uint8_t)i;
-            sx_frame[n++] = (uint8_t)(i == NSLOTS ? 1u : bank.used >> i & 1u);
-            sx_put_sound(sx_frame + n, i == NSLOTS ? set.p : bank.p[i]);
-            n += SX_SOUND;
+        if (bsx_next <= (int32_t)NSLOTS) {
+            uint32_t i = (uint32_t)bsx_next;
+            n = bsx_begin(0x02);
+            bsx_frame[n++] = (uint8_t)i;
+            bsx_frame[n++] = (uint8_t)(i == NSLOTS ? 1u : bank.used >> i & 1u);
+            bsx_put_sound(bsx_frame + n, i == NSLOTS ? set.p : bank.p[i]);
+            n += BSX_SOUND;
         } else {
-            n = sx_begin(0x03);
-            sx_frame[n++] = 1;
-            sx_frame[n++] = NSLOTS;
+            n = bsx_begin(0x03);
+            bsx_frame[n++] = 1;
+            bsx_frame[n++] = NSLOTS;
         }
-        sx_frame[n++] = 0xF7;
+        bsx_frame[n++] = 0xF7;
         if (plat_sysex_room() < n)
             return;                              /* (the rest at the next frame, as the computer reads) */
-        if (plat_sysex_send(sx_frame, n) != 0) {
-            sx_next = -1;                        /* no computer: the list is dropped */
+        if (plat_sysex_send(bsx_frame, n) != 0) {
+            bsx_next = -1;                        /* no computer: the list is dropped */
             return;
         }
-        sx_next = sx_next <= (int32_t)NSLOTS ? sx_next + 1 : -1;
+        bsx_next = bsx_next <= (int32_t)NSLOTS ? bsx_next + 1 : -1;
     }
 }
 
@@ -430,38 +430,38 @@ int app_sysex(const uint8_t *p, uint32_t n)      /* the bytes between F0 and F7 
         return 0;
     switch (p[3]) {
     case 0x01:
-        sx_next = 0;
-        sx_pump();
+        bsx_next = 0;
+        bsx_pump();
         return 1;
     case 0x04:
-        if (n != 5 + SX_SOUND || p[4] > NSLOTS) {
-            sx_reply(n > 4 ? p[4] : 0x7F, 1);
+        if (n != 5 + BSX_SOUND || p[4] > NSLOTS) {
+            bsx_reply(n > 4 ? p[4] : 0x7F, 1);
             return 1;
         }
         slot = p[4];
         if (slot == NSLOTS) {                    /* the sound being edited */
-            sx_get_sound(p + 5, set.p);
+            bsx_get_sound(p + 5, set.p);
             set_dirty = 1;
             app_say("SOUND RECEIVED", "");
             play_now();
-            sx_reply(slot, 0);
+            bsx_reply(slot, 0);
         } else {
-            sx_get_sound(p + 5, bank.p[slot]);
+            bsx_get_sound(p + 5, bank.p[slot]);
             bank.used |= 1u << slot;
-            sx_reply(slot, bank_save() == 0 ? 0u : 2u);
+            bsx_reply(slot, bank_save() == 0 ? 0u : 2u);
             app_say("RECEIVED SLOT", "");
         }
         ui.redraw = 1;
         return 1;
     case 0x06:
         if (n != 5 || p[4] >= NSLOTS) {
-            sx_reply(n > 4 ? p[4] : 0x7F, 1);
+            bsx_reply(n > 4 ? p[4] : 0x7F, 1);
             return 1;
         }
         bank.used &= ~(1u << p[4]);
         if (set.slot == p[4] + 1u)
             set.slot = 0;
-        sx_reply(p[4], bank_save() == 0 ? 0u : 2u);
+        bsx_reply(p[4], bank_save() == 0 ? 0u : 2u);
         ui.redraw = 1;
         return 1;
     }
@@ -679,7 +679,7 @@ void app_frame(void)
 {
     uint32_t now = plat_ms();
     input();
-    sx_pump();
+    bsx_pump();
     speak();
     if (ui.playing != bx_playing) {
         ui.playing = bx_playing;
