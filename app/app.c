@@ -558,11 +558,13 @@ static void input(void)
 
 void app_input_only(void) { input(); }
 
-/* the value as a bar: from the left for a range from 0, from the middle for one from -x to x */
+/* the value as a bar: from the left for a range from 0, from the middle for one from -x to x. A bar from the left
+ * reads straight off the number (0.43: 43 % of the bar), also where the range starts a little above 0 (DECAY 0.03,
+ * LOWPASS 0.01) or ends below 1 (FREQ CUTOFF, SQUARE DUTY 0.99): the same number, the same length on every row */
 static void value_bar(int32_t x, int32_t y, int32_t w, uint32_t k)
 {
     const bfxr_param_t *d = &BFXR_PARAMS[k];
-    float t = (set.p[k] - d->min) / (d->max - d->min);
+    float t = d->min < 0 ? (set.p[k] - d->min) / (d->max - d->min) : fm_clampf(set.p[k], 0, 1);
     int32_t f = (int32_t)(t * (float)w + 0.5f);
     cv_rect(x, y, w, 6, K_TRACK);
     if (d->min < 0) {
