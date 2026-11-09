@@ -91,6 +91,7 @@ typedef struct {
 #define SET_OLD_SIZE ((uint32_t)__builtin_offsetof(settings_t, play_on_change))   /* the record before the menu's settings */
 #define SET_07_SIZE ((uint32_t)__builtin_offsetof(settings_t, srec))             /* the record before the synths */
 #define SREC_NONE 0xFFu
+#define SET_08_SIZE ((uint32_t)__builtin_offsetof(settings_t, sp) + SYN_SLOTS * 16u * 4u)   /* 0.8 .. 0.12: 16 a synth */
 static settings_t set;
 static uint8_t set_dirty;
 
@@ -160,6 +161,7 @@ static struct {
     uint8_t state;                       /* RD_* */
     uint8_t synth, keep;                 /* keep: the sound kept as 16 bits (short enough) */
     uint8_t whole;                       /* worked on whole (syn_whole_t): kept raw, 16 bits or bytes */
+    uint32_t full;                       /* the sound's whole length (len: what fits the buffer) */
     syn_whole_t w;
     float peak;                          /* the finished sound's, for w.normalize */
     uint32_t len, pos;
@@ -479,6 +481,16 @@ static void app_init_settings(void)
     got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
     if (got == (int)SET_OLD_SIZE)                /* (saved before the menu: its settings at their defaults) */
         cfg_defaults();
+    if (got == (int)SET_08_SIZE) {               /* (16 parameters a synth then, 24 now: each row moved up, from the last) */
+        float *b = &set.sp[0][0];
+        for (int32_t i = (int32_t)SYN_SLOTS - 1; i >= 0; i--) {
+            for (int32_t q = 15; q >= 0; q--)
+                b[(uint32_t)i * SYN_MAXP + (uint32_t)q] = b[(uint32_t)i * 16u + (uint32_t)q];
+            for (uint32_t q = 16; q < SYN_MAXP; q++)
+                b[(uint32_t)i * SYN_MAXP + q] = 0;
+        }
+        got = (int)sizeof set;
+    }
     if ((got != (int)sizeof set && got != (int)SET_OLD_SIZE && got != (int)SET_07_SIZE) || set.magic != SET_MAGIC ||
         set.octave < -2 || set.octave > 2 || set.gen >= GEN_COUNT || set.sel > BP_COUNT - 4 || set.slot > NSLOTS) {
         settings_fresh();
@@ -525,6 +537,10 @@ static void sound_changed(void)          /* a preset synth's sound: render it ag
 static float rd_fade(uint32_t j)                 /* SoundDSP.finish's fades: 220 samples (5 ms) in and out */
 {
     uint32_t fl = rd.len / 2u < 220u ? rd.len / 2u : 220u;
+    if (rd.w.plain) {                            /* (Transfxr's: at the end of an echo's tail; a cut end faded too) */
+        uint32_t fo = rd.w.fade_out ? rd.w.fade_out : rd.full > rd.len ? 220u : 0u;
+        return fo ? fm_minf(1.0f, (float)(rd.len - 1u - j) / (float)fo) : 1.0f;
+    }
     float inv = 1.0f / (float)(fl < 1u ? 1u : fl);
     return fm_minf(1.0f, fm_minf((float)j * inv, (float)(rd.len - 1u - j) * inv));
 }
@@ -578,7 +594,7 @@ static void rd_tick(uint32_t budget_us)
         rd.synth = set.synth;
         for (k = 0; k < SYN_MAXP; k++)
             rd.p[k] = set.sp[set.synth - 1u][k];
-        rd.len = SYN_ENGINES[rd.synth - 1u].begin(vm.mem, rd.p);
+        rd.len = rd.full = SYN_ENGINES[rd.synth - 1u].begin(vm.mem, rd.p);
         if (rd.len > SB_LEN)
             rd.len = SB_LEN;                     /* (longer than the buffer: cut, and faded at the cut) */
         rd.pos = 0;
@@ -593,6 +609,9 @@ static void rd_tick(uint32_t budget_us)
             SYN_ENGINES[rd.synth - 1u].whole(rd.p, rd.len, &rd.w);
         rd.whole = rd.w.reverse > 0 || rd.w.necho > 0;
         rd.state = RD_MEAN;
+        rd.mean = 0;
+        if (rd.w.plain && !rd.keep && !rd.whole)
+            rd.state = RD_OUT;                   /* (no mean to take: made once, straight to bytes) */
     }
     while (rd.state != RD_IDLE && plat_ticks24() - t0 < budget_us * PLAT_TICKS_PER_US) {
         const syn_engine_t *e = &SYN_ENGINES[rd.synth - 1u];
@@ -656,7 +675,7 @@ static void rd_tick(uint32_t budget_us)
             }
             rd.pos += m;
             if (rd.pos >= rd.len) {
-                rd.mean = rd.len ? rd.sum / (float)rd.len : 0.0f;
+                rd.mean = rd.len && !rd.w.plain ? rd.sum / (float)rd.len : 0.0f;
                 rd.pos = 0;
                 rd.state = RD_FINISH;
             }
@@ -681,7 +700,7 @@ static void rd_tick(uint32_t budget_us)
             }
             rd.pos += n;
             if (rd.pos >= rd.len) {
-                rd.mean = rd.len ? rd.sum / (float)rd.len : 0.0f;
+                rd.mean = rd.len && !rd.w.plain ? rd.sum / (float)rd.len : 0.0f;
                 if (!rd.keep && !rd.whole)
                     (void)e->begin(vm.mem, rd.p);    /* again from the start, for the samples */
                 rd.pos = 0;

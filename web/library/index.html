@@ -147,6 +147,13 @@ function soundParams(sound) {
                    name === 'seed' ? Math.fround(sound.values[k]) : tidy(sound.values[k]);
   });
   if (synthName(sound.synth) === 'Jinglr') params.phrase = jinglrPhrase(params);
+  for (const key of Object.keys(params)) {      // a transition (Transfxr): KEY_start, KEY_end, KEY_curve -> KEY {start, end, curve}
+    const m = key.match(/^(.*)_(start|end|curve)$/);
+    if (!m || !synthKeys(sound.synth).includes(m[1] + '_curve')) continue;
+    params[m[1]] = params[m[1]] || {};
+    params[m[1]][m[2]] = m[2] === 'curve' ? (TRANSITION_CURVES[Math.round(params[key])] || 'Linear') : params[key];
+    delete params[key];
+  }
   return params;
 }
 // Jinglr's melody: bfxr2 composes it from the Variation, Notes, Contour and Rhythm (Jinglr.compose_phrase), as the FM-1
@@ -185,6 +192,7 @@ function jinglrPhrase(p) {
   return JSON.stringify(notes.slice(0, 12).map(n => ({degree: n.degree === null ? null :
     Math.round(Math.min(14, Math.max(-7, n.degree))), beats: Math.round(Math.min(2, Math.max(0.25, n.beats)) * 4) / 4})));
 }
+const TRANSITION_CURVES = ['Linear', 'Ease In', 'Ease Out', 'Smooth', 'Triangle', 'Pulse', 'Bounce', 'Steps'];
 const soundVersion = synth => synth === 0 ? BFXR_VERSION : (PRESET_SYNTHS[synth - 1] || [, ''])[1];
 function toBfxr(sound, fileName) {
   return JSON.stringify({synth_type: synthName(sound.synth), version: soundVersion(sound.synth), file_name: fileName,
@@ -207,6 +215,9 @@ function fromBfxr(text) {
   if (at < 0) throw new Error(`a ${type} sound: that synth isn't on the FM-1 yet`);
   // (a parameter missing: NaN, which the FM-1 takes as the synth's default; it keeps every value in range)
   return {synth: at + 1, values: PRESET_SYNTHS[at][2].map(name => {
+    const m = name.match(/^(.*)_(start|end|curve)$/), row = m && data.params[m[1]];
+    if (row && typeof row === 'object')
+      return m[2] === 'curve' ? Math.max(0, TRANSITION_CURVES.indexOf(row.curve)) : (Number.isFinite(+row[m[2]]) ? +row[m[2]] : NaN);
     const v = Number(data.params[name]);
     return Number.isFinite(v) ? v : NaN;
   })};

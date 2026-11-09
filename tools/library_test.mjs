@@ -78,6 +78,22 @@ let wd = 0;
 for (let i = 0; i < Math.min(wa.length, wb.length); i++) wd = Math.max(wd, Math.abs(wa[i] - wb[i]));
 check(JSON.parse(wout).synth_type === wname && Math.abs(wa.length - wb.length) <= 1 && wd < 0.02,
       `its .bfxr renders as on the FM-1 (largest difference ${wd.toFixed(4)})`);
+// Transfxr: its transitions nested again in the file, and it renders as on the FM-1
+{
+  const at = P.PRESET_SYNTHS.findIndex(x => x[0] === 'Transfxr');
+  if (at >= 0) {
+    const tp = bfxr.preset('Transfxr', bfxr.presets('Transfxr')[3], 9);
+    const fr = v => typeof v === 'number' ? f32(v) : v && typeof v.start === 'number' ? {...v, start: f32(v.start), end: f32(v.end)} : v;
+    const tf = {...tp, params: Object.fromEntries(Object.entries(tp.params).map(([k, v]) => [k, fr(v)]))};
+    const ts = P.fromBfxr(JSON.stringify({synth_type: 'Transfxr', params: tf.params}));
+    const to = JSON.parse(P.toBfxr({synth: ts.synth, values: ts.values.map(f32)}, 't'));
+    const ta = bfxr.render({...tf, renderSeed: 0.5}), tb = bfxr.render(to);
+    let td = 0;
+    for (let i = 0; i < Math.min(ta.length, tb.length); i++) td = Math.max(td, Math.abs(ta[i] - tb[i]));
+    check(typeof to.params.pitch === 'object' && to.params.pitch.curve === tf.params.pitch.curve && td < 0.02,
+          `a Transfxr file: its transitions back in shape, rendering as on the FM-1 (largest difference ${td.toFixed(4)})`);
+  }
+}
 // Jinglr: its melody written into the file, as bfxr2 composes it
 {
   const at = P.PRESET_SYNTHS.findIndex(x => x[0] === 'Jinglr');

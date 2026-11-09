@@ -34,7 +34,8 @@ typedef struct {
     const syn_param_t *p;
     uint8_t nr;
     const syn_recipe_t *r;
-    uint8_t randomize;                   /* 0 every slider at random; 1 a random recipe; 2 that, the length capped (Crittr) */
+    uint8_t randomize;                   /* 0 every slider at random; 1 a random recipe; 2 that, the length capped (Crittr);
+                                            3 Transfxr's own */
 } syn_info_t;
 
 /* what a synth does to its whole sound after making it (bfxr2 works on its buffer), before SoundDSP.finish; and after */
@@ -44,6 +45,8 @@ typedef struct {
     uint32_t echo_off[3];
     float echo_gain[3];
     uint8_t normalize;                   /* Riftr: after finishing, up to 4 times louder, to a peak of 0.9 */
+    uint8_t plain;                       /* Transfxr: finished its own way, tanh alone (no mean taken out, no fades) */
+    uint32_t fade_out;                   /* then faded over the last fade_out samples (0: none) */
 } syn_whole_t;
 
 typedef struct {
@@ -52,7 +55,7 @@ typedef struct {
     void (*whole)(const float *p, uint32_t len, syn_whole_t *w);   /* (most have none: 0) */
 } syn_engine_t;
 
-#define SYN_MAXP 16u                     /* the most parameters a preset synth has */
+#define SYN_MAXP 24u                     /* the most parameters a preset synth has (Transfxr: 23) */
 #define SYN_STATE_BYTES 65536u           /* the largest synth state (shared with the Bfxr voices: app.c) */
 
 /* bfxr2's seeded random numbers (SoundDSP.rng, mulberry32) */

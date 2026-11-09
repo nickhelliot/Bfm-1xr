@@ -97,9 +97,16 @@ static COLD void reset_unlocked(const syn_info_t *sy, float *p)
             p[k] = sy->p[k].def;
 }
 
+void transfxr_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng);
+void transfxr_randomized(const syn_info_t *sy, float *p, syn_rng_t *rng);
+
 COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
 {
     const syn_recipe_t *rc = &sy->r[r % sy->nr];
+    if (sy->randomize == 3) {                    /* Transfxr: its preset families */
+        transfxr_recipe(sy, p, r % sy->nr, rng);
+        return;
+    }
     reset_unlocked(sy, p);
     for (uint32_t i = 0; i < rc->nv; i++) {
         const syn_rv_t *v = &rc->v[i];
@@ -117,6 +124,13 @@ COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
 
 COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
+    if (sy->randomize == 3) {                    /* Transfxr: the sliders at random, then its own touches */
+        syn_info_t plain = *sy;
+        plain.randomize = 0;
+        syn_randomize(&plain, p, rng);
+        transfxr_randomized(sy, p, rng);
+        return;
+    }
     if (sy->randomize && sy->nr) {               /* bfxr2's own: one of the recipes at random */
         syn_recipe(sy, p, (uint32_t)(syn_rnd(rng) * (float)sy->nr), rng);
         if (sy->randomize == 2) {                /* (Crittr: a one-shot explorer, kept short) */
@@ -3621,6 +3635,306 @@ static void jinglr_run(void *st, float *out, uint32_t n)
     j->i += n;
 }
 
+/* ---- Transfxr: a continuous voice; curves carry its controls from one state to another ---- */
+#define TX_ECHO 10600u
+static float tx_curve(uint32_t c, float t)
+{
+    switch (c) {
+    case 1: return t * t;
+    case 2: return 1.0f - (1.0f - t) * (1.0f - t);
+    case 3: return t * t * (3.0f - 2.0f * t);
+    case 4: return 1.0f - fm_fabsf(2.0f * t - 1.0f);
+    case 5: return (1.0f - fm_sin_turns(t + 0.25f)) / 2.0f;
+    case 6:                                      /* an ease-out bounce, ending at the second state */
+        if (t < 1.0f / 2.75f) return 7.5625f * t * t;
+        if (t < 2.0f / 2.75f) { t -= 1.5f / 2.75f; return 7.5625f * t * t + 0.75f; }
+        if (t < 2.5f / 2.75f) { t -= 2.25f / 2.75f; return 7.5625f * t * t + 0.9375f; }
+        t -= 2.625f / 2.75f;
+        return 7.5625f * t * t + 0.984375f;
+    case 7: return fm_minf(1.0f, fm_floorf(t * 5.0f) / 4.0f);
+    default: return t;
+    }
+}
+
+/* bfxr2's BfxrWaveforms: Bfxr's oscillators for continuous pitch, each with its own noise */
+#include "akwf_tables.h"
+typedef struct { int32_t type; uint32_t state, bits; float previous, white, bit; int32_t cell; } tx_wave_t;
+static void tx_wave_init(tx_wave_t *w, int32_t type)
+{
+    w->type = type;
+    w->state = 0x80000000u;                      /* (seed 0.5: Math.round(0.5 * 0xffffffff) | 0) */
+    w->bits = ((w->state ^ 0x4a35u) & 0x7fffu) ? (w->state ^ 0x4a35u) & 0x7fffu : 1u;
+    w->previous = 1;
+    w->cell = -1;
+    w->white = 0;
+    w->bit = 0.5f;
+}
+static inline float tx_blep(float ph, float step)
+{
+    if (ph < step) { float t = ph / step; return t + t - t * t - 1.0f; }
+    if (ph > 1.0f - step) { float t = (ph - 1.0f) / step; return t * t + t + t + 1.0f; }
+    return 0;
+}
+static float tx_wave(tx_wave_t *w, float ph, float step)
+{
+    const uint16_t *table = w->type == 5 ? AKWF_ORGAN : w->type == 10 ? AKWF_FM : w->type == 11 ? AKWF_VOICE : 0;
+    if (ph < w->previous) {
+        uint32_t feed = (w->bits >> 1 & 1u) ^ (w->bits & 1u);
+        w->cell = -1;
+        w->bits = (w->bits >> 1) | feed << 14;
+        w->bit = (float)(int32_t)(~w->bits & 1u) - 0.5f;
+    }
+    w->previous = ph;
+    if (table) {
+        float pos = ph * 256.0f, a;
+        uint32_t i = (uint32_t)pos & 255u;
+        a = (float)table[i];
+        return (a + ((float)table[(i + 1u) & 255u] - a) * (pos - fm_floorf(pos))) / 32768.0f - 1.0f;
+    }
+    switch (w->type) {
+    case 0: {
+        float h = ph + 0.5f;
+        return (ph < 0.5f ? 1.0f : -1.0f) + tx_blep(ph, step) - tx_blep(h >= 1.0f ? h - 1.0f : h, step);
+    }
+    case 1: return 2.0f * ph - 1.0f - tx_blep(ph, step);
+    case 3: {
+        int32_t next = (int32_t)fm_floorf(ph * 32.0f);
+        if (next != w->cell) {                   /* xorshift32 */
+            w->cell = next;
+            w->state ^= w->state << 13;
+            w->state ^= w->state >> 17;
+            w->state ^= w->state << 5;
+            w->white = (float)(w->state >> 8) * (1.0f / 8388608.0f) - 1.0f;
+        }
+        return w->white;
+    }
+    case 4: return 1.0f - 4.0f * fm_fabsf(ph - 0.5f);
+    case 6: {
+        float x = ph > 0.5f ? ph - 1.0f : ph, t;
+        if (fm_fabsf(x) > 0.4975f)
+            return x > 0 ? 1.0f : -1.0f;
+        t = fm_tanf(PI * x);
+        return fm_maxf(-3.0f, fm_minf(3.0f, t)) / 3.0f;
+    }
+    case 7: return 0.75f * fm_sin_turns(ph) + (step * 20.0f < 0.5f ? 0.25f * fm_sin_turns(ph * 20.0f - fm_floorf(ph * 20.0f)) : 0.0f);
+    case 8: return 2.0f * (fm_fabsf(1.0f - 2.0f * ph * ph) - 0.609475708f);
+    case 9: return w->bit;
+    default: return fm_sin_turns(ph);
+    }
+}
+
+typedef struct {
+    uint32_t i, count, len, delay, curve[5];
+    float start[5], end[5], attack, release, damping, feedback, phase, ic1, ic2;
+    ff_t values[5];                      /* the controls, smoothed (in two floats: a slow one-pole in float drifts) */
+    uint8_t morphing;
+    tx_wave_t src, dst;
+    float echo[TX_ECHO];
+} transfxr_t;
+
+static const int8_t TX_WAVE[12] = {2, 4, 1, 0, 8, 6, 7, 3, 11, 9, 5, 10};   /* the waveType's Bfxr wave */
+
+static uint32_t transfxr_tail(const float *p, uint32_t *delay, uint32_t *count)
+{
+    float dur = syn_clamp(p[TRANSFXR_duration], 0.05f, 4.0f), fb = syn_clamp(p[TRANSFXR_echo], 0, 0.8f) * 0.65f;
+    uint32_t c = syn_len(dur);
+    *count = c > 2u ? c : 2u;
+    *delay = (uint32_t)fm_floorf(fm_minf(0.24f, fm_maxf(0.075f, dur * 0.23f)) * RATE + 0.5f);
+    return fb > 0 ? ceil_u(fm_logf(0.0001f) / fm_logf(fb)) * *delay : 0u;
+}
+
+static COLD uint32_t transfxr_begin(void *st, const float *p)
+{
+    static const uint8_t K[5][3] = {{TRANSFXR_pitch_start, TRANSFXR_pitch_end, TRANSFXR_pitch_curve},
+                                    {TRANSFXR_tone_start, TRANSFXR_tone_end, TRANSFXR_tone_curve},
+                                    {TRANSFXR_vibrato_start, TRANSFXR_vibrato_end, TRANSFXR_vibrato_curve},
+                                    {TRANSFXR_level_start, TRANSFXR_level_end, TRANSFXR_level_curve},
+                                    {TRANSFXR_morph_start, TRANSFXR_morph_end, TRANSFXR_morph_curve}};
+    transfxr_t *x = st;
+    int32_t wt = (int32_t)fm_floorf(syn_clamp(p[TRANSFXR_waveType], 0, 11) + 0.5f);
+    int32_t to = (int32_t)fm_floorf(syn_clamp(p[TRANSFXR_waveTo], -1, 11) + 0.5f);
+    uint32_t tail = transfxr_tail(p, &x->delay, &x->count);
+    x->len = x->count + tail;
+    for (uint32_t k = 0; k < 5; k++) {
+        x->start[k] = syn_clamp(p[K[k][0]], 0, 1);
+        x->end[k] = syn_clamp(p[K[k][1]], 0, 1);
+        x->curve[k] = (uint32_t)fm_floorf(syn_clamp(p[K[k][2]], 0, 7) + 0.5f);
+        x->values[k] = ff_set(x->start[k]);
+    }
+    x->attack = fm_maxf(0.003f, syn_clamp(p[TRANSFXR_attack], 0, 1)) * RATE;
+    x->release = fm_maxf(0.006f, syn_clamp(p[TRANSFXR_release], 0, 1)) * RATE;
+    x->damping = 1.0f / (0.707f + syn_clamp(p[TRANSFXR_resonance], 0, 1) * 5.0f);
+    x->feedback = syn_clamp(p[TRANSFXR_echo], 0, 0.8f) * 0.65f;
+    tx_wave_init(&x->src, TX_WAVE[wt]);
+    x->morphing = to >= 0;
+    tx_wave_init(&x->dst, to >= 0 ? TX_WAVE[to] : 2);
+    x->phase = x->ic1 = x->ic2 = 0;
+    for (uint32_t k = 0; k < x->delay && k < TX_ECHO; k++)
+        x->echo[k] = 0;
+    x->i = 0;
+    return x->len;
+}
+
+static void transfxr_whole(const float *p, uint32_t len, syn_whole_t *w)
+{
+    uint32_t d, c;
+    (void)len;
+    w->plain = 1;                                /* tanh, the volume, and a fade at the end of an echo's tail */
+    w->fade_out = transfxr_tail(p, &d, &c) ? 256u : 0u;
+}
+
+static void transfxr_run(void *st, float *out, uint32_t n)
+{
+    transfxr_t *x = st;
+    for (uint32_t q = 0; q < n; q++, x->i++) {
+        uint32_t i = x->i;
+        float o = 0;
+        if (i < x->count) {
+            float t = (float)i / (float)(x->count - 1u), f, step, g, a1, sample = 0, vib, fade;
+            for (uint32_t k = 0; k < 5; k++) {   /* 2 ms of smoothing: stepped curves do not click */
+                float target = x->start[k] + (x->end[k] - x->start[k]) * tx_curve(x->curve[k], t);
+                if (k < 4 || x->morphing)
+                    ff_add(&x->values[k], ((target - x->values[k].hi) - x->values[k].lo) * 0.012f);
+            }
+            vib = 8.0f * (float)i / RATE;
+            f = 40.0f * fm_exp2f((x->values[0].hi * 7.0f + x->values[0].lo * 7.0f) +
+                                 fm_sin_turns(vib - fm_floorf(vib)) * x->values[2].hi * 0.16f);
+            step = f / (RATE * 2.0f);
+            g = fm_tanf(PI * 100.0f * fm_powf(160.0f, x->values[1].hi) / (RATE * 2.0f));
+            a1 = 1.0f / (1.0f + g * (g + x->damping));
+            for (uint32_t s2 = 0; s2 < 2; s2++) {   /* the oscillator twice over, through a state-variable filter */
+                float src = tx_wave(&x->src, x->phase, step), osc, v1, v2;
+                osc = x->morphing ? src * (1.0f - x->values[4].hi) + tx_wave(&x->dst, x->phase, step) * x->values[4].hi : src;
+                x->phase += step;
+                x->phase -= fm_floorf(x->phase);
+                v1 = a1 * (x->ic1 + g * (osc - x->ic2));
+                v2 = x->ic2 + g * v1;
+                x->ic1 = 2.0f * v1 - x->ic1;
+                x->ic2 = 2.0f * v2 - x->ic2;
+                sample += v2 * 0.5f;
+            }
+            fade = fm_minf(1.0f, (float)i / x->attack) * fm_minf(1.0f, (float)(x->count - 1u - i) / x->release);
+            o = fm_tanhf(sample * 1.4f) * x->values[3].hi * fade;
+        }
+        if (x->delay && x->delay <= TX_ECHO) {   /* the echo rings on outside the voice's envelope */
+            float *e = &x->echo[i % x->delay];
+            if (i >= x->delay)
+                o += *e * x->feedback;
+            *e = o;
+        }
+        out[q] = o;
+    }
+}
+
+/* Transfxr's buttons: bfxr2's PresetFamily.sample, an exemplar of the family, a little of a partner, varied */
+static COLD void transfxr_family(const syn_info_t *sy, float *p, uint32_t fam, syn_rng_t *rng)
+{
+    const tx_family_t *f = &TX_FAM[fam % TX_NFAM];
+    float v[TRANSFXR_NP], vol = p[0];
+    uint32_t anchor = (uint32_t)(syn_rnd(rng) * (float)f->n) % f->n, partners = 0, pick;
+    const uint16_t *a = TX_EX + (f->first + anchor) * TRANSFXR_NP;
+    static const uint8_t CURVES[5] = {TRANSFXR_pitch_curve, TRANSFXR_tone_curve, TRANSFXR_vibrato_curve, TRANSFXR_level_curve,
+                                      TRANSFXR_morph_curve};
+    static const uint8_t ENDS[5][2] = {{TRANSFXR_pitch_start, TRANSFXR_pitch_end}, {TRANSFXR_tone_start, TRANSFXR_tone_end},
+                                       {TRANSFXR_vibrato_start, TRANSFXR_vibrato_end}, {TRANSFXR_level_start, TRANSFXR_level_end},
+                                       {TRANSFXR_morph_start, TRANSFXR_morph_end}};
+    float a_echo;
+    for (uint32_t k = 0; k < TRANSFXR_NP; k++) {
+        const syn_param_t *d = &sy->p[k];
+        v[k] = d->choices ? (float)a[k] - 1.0f : d->min + (float)a[k] / 65535.0f * (d->max - d->min);
+    }
+    a_echo = v[TRANSFXR_echo];
+    for (uint32_t c = 0; c < f->n; c++) {        /* the compatible others: the same waves and curves */
+        const uint16_t *b = TX_EX + (f->first + c) * TRANSFXR_NP;
+        int ok = c != anchor && b[TRANSFXR_waveType] == a[TRANSFXR_waveType] && b[TRANSFXR_waveTo] == a[TRANSFXR_waveTo];
+        for (uint32_t m = 0; m < 5 && ok; m++)
+            ok = b[CURVES[m]] == a[CURVES[m]];
+        partners += (uint32_t)ok;
+    }
+    if (partners) {
+        uint32_t want = (uint32_t)(syn_rnd(rng) * (float)partners) % partners, seen = 0;
+        float amount = syn_rnd(rng) * 0.3f;
+        for (pick = 0; pick < f->n; pick++) {
+            const uint16_t *b = TX_EX + (f->first + pick) * TRANSFXR_NP;
+            int ok = pick != anchor && b[TRANSFXR_waveType] == a[TRANSFXR_waveType] && b[TRANSFXR_waveTo] == a[TRANSFXR_waveTo];
+            for (uint32_t m = 0; m < 5 && ok; m++)
+                ok = b[CURVES[m]] == a[CURVES[m]];
+            if (ok && seen++ == want)
+                break;
+        }
+        {
+            const uint16_t *b = TX_EX + (f->first + pick) * TRANSFXR_NP;
+            for (uint32_t k = 1; k < TRANSFXR_NP; k++) {
+                const syn_param_t *d = &sy->p[k];
+                float bv;
+                if (d->choices || k == TRANSFXR_waveType)
+                    continue;                    /* (the anchor's curves and waves: its identity) */
+                bv = d->min + (float)b[k] / 65535.0f * (d->max - d->min);
+                v[k] += (bv - v[k]) * amount;
+            }
+        }
+    }
+    {
+        float time = 0.85f + syn_rnd(rng) * 0.3f;
+        v[TRANSFXR_duration] *= time;
+        v[TRANSFXR_attack] *= time;
+        v[TRANSFXR_release] *= time;
+    }
+    for (uint32_t m = 0; m < 5; m++) {
+        float shift = (syn_rnd(rng) - 0.5f) * f->var[m];
+        for (uint32_t e = 0; e < 2; e++)
+            v[ENDS[m][e]] = syn_clamp(v[ENDS[m][e]] + shift, 0, 1);
+    }
+    v[TRANSFXR_resonance] = syn_clamp(v[TRANSFXR_resonance] + (syn_rnd(rng) - 0.5f) * 0.08f, 0, 1);
+    v[TRANSFXR_echo] = a_echo == 0 ? 0.0f : syn_clamp(v[TRANSFXR_echo] + (syn_rnd(rng) - 0.5f) * 0.08f, 0, 1);
+    for (uint32_t l = 0; l < f->nlim; l++) {     /* the family's limits */
+        const tx_limit_t *lm = &TX_LIM[f->lim0 + l];
+        v[lm->param] = lm->fixed ? lm->a : syn_clamp(v[lm->param], lm->a, lm->b);
+    }
+    if (f->has_iv) {                             /* and its pitch interval */
+        v[TRANSFXR_pitch_end] = v[TRANSFXR_pitch_start] + syn_clamp(v[TRANSFXR_pitch_end] - v[TRANSFXR_pitch_start], f->iv0, f->iv1);
+        for (uint32_t l = 0; l < f->nlim; l++)
+            if (TX_LIM[f->lim0 + l].param == TRANSFXR_pitch_end) {
+                const tx_limit_t *lm = &TX_LIM[f->lim0 + l];
+                v[lm->param] = lm->fixed ? lm->a : syn_clamp(v[lm->param], lm->a, lm->b);
+            }
+    }
+    syn_defaults(sy, p);
+    for (uint32_t k = 1; k < TRANSFXR_NP; k++)
+        syn_set(sy, p, k, v[k]);
+    p[0] = vol;
+}
+
+COLD void transfxr_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
+{
+    static const uint8_t MC[4] = {3, 1, 2, 5};   /* Smooth, Ease In, Ease Out, Pulse */
+    if (r < TX_NFAM) {
+        transfxr_family(sy, p, r, rng);
+        return;
+    }
+    transfxr_family(sy, p, (uint32_t)(syn_rnd(rng) * (float)TX_NFAM), rng);   /* TIMBRAL MORPH: between two waves */
+    syn_set(sy, p, TRANSFXR_waveTo, (float)(((uint32_t)p[TRANSFXR_waveType] + 1u + (uint32_t)(syn_rnd(rng) * 11.0f)) % 12u));
+    syn_set(sy, p, TRANSFXR_morph_start, 0);
+    syn_set(sy, p, TRANSFXR_morph_end, 1);
+    syn_set(sy, p, TRANSFXR_morph_curve, (float)MC[(uint32_t)(syn_rnd(rng) * 4.0f) & 3u]);
+    syn_set(sy, p, TRANSFXR_tone_start, 0.8f);
+    syn_set(sy, p, TRANSFXR_tone_end, 0.75f + syn_rnd(rng) * 0.25f);
+    syn_set(sy, p, TRANSFXR_tone_curve, 3);
+    syn_set(sy, p, TRANSFXR_duration, 0.5f + syn_rnd(rng) * 1.2f);
+}
+
+COLD void transfxr_randomized(const syn_info_t *sy, float *p, syn_rng_t *rng)   /* after the sliders at random */
+{
+    float d;
+    syn_set(sy, p, TRANSFXR_duration, 0.15f + syn_rnd(rng) * 1.65f);
+    d = p[TRANSFXR_duration];
+    syn_set(sy, p, TRANSFXR_attack, syn_rnd(rng) * d * 0.25f);
+    syn_set(sy, p, TRANSFXR_release, syn_rnd(rng) * d * 0.6f);
+    syn_set(sy, p, TRANSFXR_level_start, 0.4f + syn_rnd(rng) * 0.6f);
+    syn_set(sy, p, TRANSFXR_level_end, 0.15f + syn_rnd(rng) * 0.75f);
+    syn_set(sy, p, TRANSFXR_level_curve, 0);
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -3641,6 +3955,7 @@ const syn_engine_t SYN_ENGINES[] = {
     {riftr_begin, riftr_run, riftr_whole},
     {glitchr_begin, glitchr_run},
     {jinglr_begin, jinglr_run, jinglr_whole},
+    {transfxr_begin, transfxr_run, transfxr_whole},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
@@ -3652,4 +3967,4 @@ _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_S
                sizeof(squishr_t) <= SYN_STATE_BYTES && sizeof(clonkr_t) <= SYN_STATE_BYTES &&
                sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES &&
                sizeof(riftr_t) <= SYN_STATE_BYTES && sizeof(glitchr_t) <= SYN_STATE_BYTES &&
-               sizeof(jinglr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(jinglr_t) <= SYN_STATE_BYTES && sizeof(transfxr_t) <= SYN_STATE_BYTES, "synth state");

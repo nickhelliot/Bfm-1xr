@@ -16,7 +16,8 @@ globalThis.window = globalThis;
 const src = fs.readFileSync(path.join(bfxrDir, 'lib', 'bfxrlib.js'), 'utf8');
 const at = src.indexOf('\n', src.indexOf('const BFXR_SYNTHS = {'));   // (the library keeps its synths to itself)
 if (at < 0) { console.error('bfxrlib.js: BFXR_SYNTHS not found'); process.exit(2); }
-(0, eval)(src.slice(0, at) + '\nglobalThis.__BFXR_SYNTHS = BFXR_SYNTHS;' + src.slice(at));
+(0, eval)(src.slice(0, at) + '\nglobalThis.__BFXR_SYNTHS = BFXR_SYNTHS;' +
+  '\nglobalThis.__FAMILIES = typeof TRANSFXR_PRESET_FAMILIES === "undefined" ? [] : TRANSFXR_PRESET_FAMILIES;' + src.slice(at));
 const bfxr = globalThis.bfxr, SYNTHS = globalThis.__BFXR_SYNTHS;
 
 for (const name of bfxr.synths()) {
@@ -24,7 +25,16 @@ for (const name of bfxr.synths()) {
   const engine = new SYNTHS[name]();
   const dir = path.join(outDir, name);
   fs.mkdirSync(dir, {recursive: true});
-  const rows = engine.param_info.map(row => {
+  // a transition (Transfxr: start, end and the curve between) is three: KEY_start, KEY_end, KEY_curve
+  const rows = engine.param_info.flatMap(row => row && row.type === 'KNOB_TRANSITION' ? [
+    {label: row.display_name + ' start', key: row.name + '_start', def: row.default_value_l, min: row.min, max: row.max, choices: null,
+     get: v => v.start},
+    {label: row.display_name + ' end', key: row.name + '_end', def: row.default_value_r, min: row.min, max: row.max, choices: null,
+     get: v => v.end},
+    {label: row.display_name + ' curve', key: row.name + '_curve', def: row.curves.indexOf(row.default_tween), min: 0,
+     max: row.curves.length - 1, choices: row.curves, values: row.curves.map((_, i) => i), get: v => row.curves.indexOf(v.curve)}
+  ] : [row]).map(row => {
+    if (row && row.get) return row;
     if (Array.isArray(row)) {                    // a slider: [label, tip, key, default, min, max]
       const [label, tip, key, def, min, max] = row;
       if (Array.isArray(def) || typeof key !== 'string') return null;
@@ -40,15 +50,21 @@ for (const name of bfxr.synths()) {
     (r.choices ? `\tselect:${r.choices.join('|')}\tvalues:${r.values.join(',')}` : '')).join('\n') + '\n');
   fs.writeFileSync(path.join(dir, 'recipes.json'), JSON.stringify(engine.recipes || [], null, 1));
   fs.writeFileSync(path.join(dir, 'version.txt'), String(engine.version || '') + '\n');   // (a .bfxr file's "version")
+  if (name === 'Transfxr') {                     // its buttons: bfxr2's preset families (PresetFamily.sample)
+    const curves = engine.param_info.find(r => r.type === 'KNOB_TRANSITION').curves;
+    fs.writeFileSync(path.join(dir, 'families.json'), JSON.stringify({curves, families: globalThis.__FAMILIES}));
+  }
   let n = 0;
   for (const id of bfxr.presets(name)) {
     for (const seed of [11, 'b', 4242]) {
       const s = bfxr.preset(name, id, seed);
       for (const k of Object.keys(s.params))     // the FM-1 keeps its parameters as floats
         if (typeof s.params[k] === 'number') s.params[k] = Math.fround(s.params[k]);
+        else if (s.params[k] && typeof s.params[k].start === 'number')   // (a transition's ends too)
+          s.params[k] = {...s.params[k], start: Math.fround(s.params[k].start), end: Math.fround(s.params[k].end)};
       let pcm;
       try { pcm = bfxr.render(s); } catch (e) { console.error(name, id, e.message); continue; }
-      const vals = rows.map(r => s.params[r.key]);
+      const vals = rows.map(r => r.get ? r.get(s.params[r.key.replace(/_(start|end|curve)$/, '')]) : s.params[r.key]);
       if (vals.some(v => typeof v !== 'number')) { console.error(name, id, 'a parameter is not a number'); continue; }
       const cid = String(n++).padStart(4, '0');
       fs.writeFileSync(path.join(dir, `case_${cid}.txt`), vals.map(v => v.toPrecision(17)).join('\n') + '\n');

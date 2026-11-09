@@ -83,7 +83,12 @@ int main(int argc, char **argv)
                 float vol = p[0] < 0 ? 0 : p[0] > 1 ? 1 : p[0];
                 if (fl < 1) fl = 1;
                 for (uint32_t i = 0; i < len; i++) {
-                    double v = isfinite(out[i]) ? out[i] - mean : 0, fade = 1;
+                    double v = isfinite(out[i]) ? out[i] - (w.plain ? 0 : mean) : 0, fade = 1;
+                    if (w.plain) {                   /* (Transfxr's own: tanh, a fade at the end of an echo) */
+                        if (w.fade_out && (double)(len - 1 - i) / w.fade_out < 1) fade = (double)(len - 1 - i) / w.fade_out;
+                        out[i] = (float)(tanh(v) * vol * 0.95 * fade);
+                        continue;
+                    }
                     if ((double)i / fl < fade) fade = (double)i / fl;
                     if ((double)(len - 1 - i) / fl < fade) fade = (double)(len - 1 - i) / fl;
                     out[i] = (float)(tanh(v) * vol * 0.95 * fade);
