@@ -7,12 +7,35 @@
 #include "synth_tables.h"
 #include "fastmath.h"
 
+/* the heavier maths called, not copied into every loop (the FM-1's flash is the limit: the synths at -O2 would
+ * otherwise fill it) */
+#define NOINL __attribute__((noinline))
+#ifdef __clang__                                 /* run once per sound: small, not fast */
+#define COLD __attribute__((minsize, cold))
+#else
+#define COLD __attribute__((cold))
+#endif
+static NOINL float s_powf(float x, float y) { return fm_powf(x, y); }
+static NOINL float s_expf(float x) { return fm_expf(x); }
+static NOINL float s_exp2f(float x) { return fm_exp2f(x); }
+static NOINL float s_sinf(float x) { return fm_sinf(x); }
+static NOINL float s_cosf(float x) { return fm_cosf(x); }
+static NOINL float s_sin_turns(float x) { return fm_sin_turns(x); }
+static NOINL float s_sqrtf(float x) { return fm_sqrtf(x); }
+#define fm_powf s_powf
+#define fm_expf s_expf
+#define fm_exp2f s_exp2f
+#define fm_sinf s_sinf
+#define fm_cosf s_cosf
+#define fm_sin_turns s_sin_turns
+#define fm_sqrtf s_sqrtf
+
 #define RATE 44100.0f
 #define TAU FM_TWO_PI
 #define PI FM_PI
 
 /* SoundDSP.rng's state, floor(seed * 4294967295), worked out exactly from a float seed in integers */
-void syn_rng_seed(syn_rng_t *r, float seed)
+COLD void syn_rng_seed(syn_rng_t *r, float seed)
 {
     fm_bits_t b;
     int32_t e, s;
@@ -43,7 +66,7 @@ static int is_key(const char *a, const char *b)
 }
 static int locked(const syn_info_t *sy, uint32_t k) { return is_key(sy->p[k].key, "masterVolume"); }
 
-void syn_set(const syn_info_t *sy, float *p, uint32_t k, float v)
+COLD void syn_set(const syn_info_t *sy, float *p, uint32_t k, float v)
 {
     const syn_param_t *d = &sy->p[k];
     v = syn_clamp(v, d->min, d->max);
@@ -52,20 +75,20 @@ void syn_set(const syn_info_t *sy, float *p, uint32_t k, float v)
     p[k] = v;
 }
 
-void syn_defaults(const syn_info_t *sy, float *p)
+COLD void syn_defaults(const syn_info_t *sy, float *p)
 {
     for (uint32_t k = 0; k < sy->np; k++)
         p[k] = sy->p[k].def;
 }
 
-static void reset_unlocked(const syn_info_t *sy, float *p)
+static COLD void reset_unlocked(const syn_info_t *sy, float *p)
 {
     for (uint32_t k = 0; k < sy->np; k++)
         if (!locked(sy, k))
             p[k] = sy->p[k].def;
 }
 
-void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
+COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
 {
     const syn_recipe_t *rc = &sy->r[r % sy->nr];
     reset_unlocked(sy, p);
@@ -81,7 +104,7 @@ void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
             p[k] = syn_rnd(rng);
 }
 
-void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
+COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
     reset_unlocked(sy, p);
     for (uint32_t k = 0; k < sy->np; k++) {
@@ -101,7 +124,7 @@ void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
     }
 }
 
-void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng)
+COLD void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
     for (uint32_t k = 0; k < sy->np; k++) {
         const syn_param_t *d = &sy->p[k];
@@ -111,7 +134,7 @@ void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng)
     }
 }
 
-int syn_find(const syn_info_t *sy, const char *key)
+COLD int syn_find(const syn_info_t *sy, const char *key)
 {
     for (uint32_t k = 0; k < sy->np; k++)
         if (is_key(sy->p[k].key, key))
@@ -119,7 +142,7 @@ int syn_find(const syn_info_t *sy, const char *key)
     return -1;
 }
 
-int syn_choices(const syn_param_t *d, uint32_t v, char *out, uint32_t cap)
+COLD int syn_choices(const syn_param_t *d, uint32_t v, char *out, uint32_t cap)
 {
     const char *c = d->choices;
     uint32_t i = 0, n = 0;
@@ -139,7 +162,7 @@ int syn_choices(const syn_param_t *d, uint32_t v, char *out, uint32_t cap)
 
 /* Math.round(duration * 44100) exactly, as bfxr2 works it out in double: the float's mantissa times 44100, in two
  * 32-bit halves (the FM-1's compiler has no 64-bit multiply) */
-static uint32_t syn_len(float duration)
+static COLD uint32_t syn_len(float duration)
 {
     fm_bits_t b;
     uint32_t m, a, c, lo, hi, add;
@@ -183,7 +206,7 @@ static inline void ff_split(float a, float *h, float *l)
     *h = c - (c - a);
     *l = a - *h;
 }
-static inline float ff_frac_mul(const ff_t *x, float k)     /* the fraction of x * k, 0 .. 1 */
+static NOINL float ff_frac_mul(const ff_t *x, float k)     /* the fraction of x * k, 0 .. 1 */
 {
     float p = x->hi * k, ah, al, bh, bl, e, f;
     ff_split(x->hi, &ah, &al);
@@ -233,7 +256,7 @@ typedef struct {
     float base, offset, beat, low, broad, phase;
 } whooshr_t;
 
-static uint32_t whooshr_begin(void *st, const float *p)
+static COLD uint32_t whooshr_begin(void *st, const float *p)
 {
     whooshr_t *w = st;
     float duration = syn_clamp(p[WHOOSHR_duration], 0.1f, 5.0f);
@@ -290,7 +313,7 @@ typedef struct {
 } choirr_t;
 
 
-static uint32_t choirr_begin(void *st, const float *p)
+static COLD uint32_t choirr_begin(void *st, const float *p)
 {
     static const int8_t CHORDS[5][4] = {{0, 0, 0, 0}, {0, 4, 7, 12}, {0, 3, 7, 12}, {0, 7, 12, 19}, {0, 1, 6, 10}};
     static const uint8_t CHORD_N[5] = {1, 4, 4, 4, 4};
@@ -406,7 +429,7 @@ typedef struct {
     float echo[BR_DELAY_MAX];            /* the output's last `delay` samples */
 } breathr_t;
 
-static uint32_t breathr_begin(void *st, const float *p)
+static COLD uint32_t breathr_begin(void *st, const float *p)
 {
     breathr_t *b = st;
     float duration = syn_clamp(p[BREATHR_duration], 0.15f, 5.0f), inhale, hold;
@@ -519,7 +542,7 @@ typedef struct {
     birdr_syl_t syl[16];
 } birdr_t;
 
-static uint32_t birdr_begin(void *st, const float *p)
+static COLD uint32_t birdr_begin(void *st, const float *p)
 {
     birdr_t *b = st;
     float gap, rhythm, variation, w[16], total = 0, offset = 0;
@@ -635,7 +658,7 @@ typedef struct {
     bouncr_hit_t h[BO_MAXH];
 } bouncr_t;
 
-static uint32_t bouncr_begin(void *st, const float *p)
+static COLD uint32_t bouncr_begin(void *st, const float *p)
 {
     static const struct { float pitch, decay, hard, ratios[4]; } OBJ[5] = {
         {0.55f, 0.041f, 0.22f, {1, 1.97f, 3.17f, 4.8f}}, {1, 0.030f, 0.64f, {1, 2.43f, 4.13f, 6.27f}},
@@ -787,7 +810,7 @@ typedef struct {
     swarmr_agent_t a[SW_MAXA];
 } swarmr_t;
 
-static uint32_t swarmr_begin(void *st, const float *p)
+static COLD uint32_t swarmr_begin(void *st, const float *p)
 {
     swarmr_t *w = st;
     syn_rng_t rng;
@@ -948,7 +971,7 @@ typedef struct {
     ff_t phase, teeth;                   /* the rotor in turns; the teeth counted */
 } machinr_t;
 
-static uint32_t machinr_begin(void *st, const float *p)
+static COLD uint32_t machinr_begin(void *st, const float *p)
 {
     machinr_t *m = st;
     float scale, ring_f, size = p[MACHINR_size];
@@ -1083,7 +1106,7 @@ typedef struct {
     ff_t phase;                          /* in turns */
 } crittr_t;
 
-static uint32_t crittr_begin(void *st, const float *p)
+static COLD uint32_t crittr_begin(void *st, const float *p)
 {
     static const float ANAT[8][3] = {{550, 1260, 2550}, {820, 2100, 3900}, {360, 950, 1840}, {1100, 2800, 4700},
                                      {430, 1500, 3200}, {670, 1740, 3550}, {430, 1150, 2450}, {700, 1900, 3100}};

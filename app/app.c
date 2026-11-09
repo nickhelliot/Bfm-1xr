@@ -133,7 +133,7 @@ static volatile uint32_t sp_snd = SPLASH_SND_N;  /* the start-up sound: the next
  * made twice, once for the mean, once for the samples, each µ-law in a byte. The keys play the buffer, transposed, NVOICES at once. A change
  * to the sound renders it again; what is asked to play meanwhile waits for it (rd.pend). The start-up animation
  * borrows the buffer until it ends. */
-#define SB_LEN 220500u                                   /* 5 s */
+#define SB_LEN 220000u                                   /* 4.99 s (the pool keeps 8 KB free) */
 #define SB_BYTES (SB_LEN > 2u * SPLASH_W * SPLASH_H ? SB_LEN : 2u * SPLASH_W * SPLASH_H)
 static uint8_t sb_mem[SB_BYTES] PLAT_POOL __attribute__((aligned(4)));
 static float sb_dec[256];                                /* µ-law code -> sample */
