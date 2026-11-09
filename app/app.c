@@ -114,7 +114,13 @@ static bank_t bank;
  * HARMONICS), so the audio never runs late. */
 #define NVOICES 4u
 #define BX_LOAD_MAX 70u                          /* % of a block's time */
-static bfxr_voice_t bx_voice[NVOICES];
+/* the classic Bfxr's voices and a preset synth's state share their memory: one synth at a time is on screen, and a
+ * render waits until no Bfxr voice plays (rd_tick) */
+static union {
+    bfxr_voice_t v[NVOICES];
+    uint32_t mem[SYN_STATE_BYTES / 4u];
+} vm;
+#define bx_voice (vm.v)
 static uint32_t bx_age[NVOICES], bx_clock;
 static float bx_buf[APP_BLOCK], bx_one[APP_BLOCK];
 typedef struct { float pitch; uint8_t mono; } bx_req_t;
@@ -122,6 +128,7 @@ static bx_req_t bx_ring[8];
 static volatile uint32_t bx_head, bx_tail;       /* main loop writes head, the audio interrupt tail */
 static volatile int32_t bx_playing;              /* sounds playing now */
 static volatile uint32_t bx_load, bx_cuts;       /* the last block's time in %, the sounds cut for time */
+static volatile uint32_t bx_bfxr_on;             /* Bfxr voices on after the last block (their memory in use) */
 static uint32_t bx_seed = 0x2545F491u;
 static float bx_gain;
 static volatile uint32_t sp_snd = SPLASH_SND_N;  /* the start-up sound: the next sample (SPLASH_SND_N: none) */
@@ -155,7 +162,6 @@ static struct {
     float p[SYN_MAXP];
     struct { int32_t st; uint8_t mono; } pend[4];   /* asked to play while it renders */
     uint8_t npend;
-    uint32_t mem[SYN_STATE_BYTES / 4u];  /* the synth's state */
 } rd;
 
 static uint8_t mulaw(float x)            /* -1 .. 1 -> sign and 7 bits, log2(1 + 255|x|) / 8 */
@@ -285,6 +291,12 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         for (i = 0; i < n; i++)
             bx_buf[i] += bx_one[i];
         playing += bx_voice[v].active;
+    }
+    {
+        uint32_t on = 0;
+        for (v = 0; v < NVOICES; v++)
+            on += bx_voice[v].active;
+        bx_bfxr_on = on;
     }
     for (v = 0; v < NVOICES; v++) {              /* a preset synth's sound, from the buffer */
         sb_voice_t *b = &sb_voice[v];
@@ -530,6 +542,8 @@ static void rd_tick(uint32_t budget_us)
 {
     uint32_t t0 = plat_ticks24(), i;
     float blk[256];
+    if (rd.want && set.synth && bx_bfxr_on)
+        return;                                  /* (a Bfxr voice still in the shared memory: the next frame) */
     if (rd.want) {
         uint32_t k;
         rd.want = 0;
@@ -542,7 +556,7 @@ static void rd_tick(uint32_t budget_us)
         rd.synth = set.synth;
         for (k = 0; k < SYN_MAXP; k++)
             rd.p[k] = set.sp[set.synth - 1u][k];
-        rd.len = SYN_ENGINES[rd.synth - 1u].begin(rd.mem, rd.p);
+        rd.len = SYN_ENGINES[rd.synth - 1u].begin(vm.mem, rd.p);
         if (rd.len > SB_LEN)
             rd.len = SB_LEN;                     /* (longer than the buffer: cut, and faded at the cut) */
         rd.pos = 0;
@@ -569,7 +583,7 @@ static void rd_tick(uint32_t budget_us)
             continue;
         }
         if (n)
-            e->run(rd.mem, blk, n);
+            e->run(vm.mem, blk, n);
         if (rd.state == RD_MEAN) {
             for (i = 0; i < n; i++) {
                 float v = blk[i], y, t;
@@ -587,7 +601,7 @@ static void rd_tick(uint32_t budget_us)
             if (rd.pos >= rd.len) {
                 rd.mean = rd.len ? rd.sum / (float)rd.len : 0.0f;
                 if (!rd.keep)
-                    (void)e->begin(rd.mem, rd.p);    /* again from the start, for the samples */
+                    (void)e->begin(vm.mem, rd.p);    /* again from the start, for the samples */
                 rd.pos = 0;
                 rd.state = rd.keep ? RD_FINISH : RD_OUT;
             }

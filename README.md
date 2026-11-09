@@ -2,7 +2,8 @@
 
 BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
 hits, jumps and blips, made the way bfxr.net makes them and played from the keys. Press **ENV** for bfxr.net's other
-synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines and critters, each on its own screen.
+synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines, critters, zaps, signals, plucks and rustles,
+each on its own screen.
 
 ![The BFMXR screen](docs/screen.png)
 
@@ -103,6 +104,10 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **SWARMR** | Flocks and swarms: wings, chirps, rotors, ticks |
 | **MACHINR** | Motors, gears, shutters, clocks, engines, servos, doors |
 | **CRITTR** | Creature calls, from throats and beaks to a dog and a cat |
+| **ZAPPR** | Electric arcs, sparks and hum |
+| **SIGNLR** | Radio and data signals: beeps, chirps, packets, sonar pings |
+| **PLUCKR** | Plucked strings: nylon, steel, gut, rubber, glass |
+| **RUSTLR** | Paper, cloth, leather, plastic, foil and zips |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
 

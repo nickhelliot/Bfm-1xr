@@ -299,8 +299,160 @@ static const syn_recipe_t CRITTR_RECIPES[10] = {
     {"ANGRY BLOB", CRITTR_R9, 11},
 };
 
+enum { ZAPPR_masterVolume, ZAPPR_seed, ZAPPR_duration, ZAPPR_voltage, ZAPPR_arcs, ZAPPR_branching, ZAPPR_crackle, ZAPPR_hum, ZAPPR_spark, ZAPPR_spread, ZAPPR_decay, ZAPPR_NP };
+static const syn_param_t ZAPPR_P[11] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"duration", "DURATION", 1.2f, 0.12f, 5.0f, 0, 0},
+    {"voltage", "VOLTAGE", 0.55f, 0.0f, 1.0f, 0, 0},
+    {"arcs", "ARCS", 7.0f, 1.0f, 24.0f, 0, 1},
+    {"branching", "BRANCHING", 0.4f, 0.0f, 1.0f, 0, 0},
+    {"crackle", "CRACKLE", 0.45f, 0.0f, 1.0f, 0, 0},
+    {"hum", "HUM", 0.2f, 0.0f, 1.0f, 0, 0},
+    {"spark", "SPARKS", 0.65f, 0.0f, 1.0f, 0, 0},
+    {"spread", "SPREAD", 0.7f, 0.0f, 1.0f, 0, 0},
+    {"decay", "DECAY", 0.4f, 0.0f, 1.0f, 0, 0},
+};
+static const syn_rv_t ZAPPR_R0[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.12f, 0.3f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.0f, 0.02f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const syn_rv_t ZAPPR_R1[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 1.3f, 2.8f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 14.0f, 24.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}};
+static const syn_rv_t ZAPPR_R2[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.5f, 1.5f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 5.0f, 12.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}};
+static const syn_rv_t ZAPPR_R3[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.5f, 1.3f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.02f, 0.18f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}};
+static const syn_rv_t ZAPPR_R4[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.4f, 1.1f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 9.0f, 20.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}};
+static const syn_rv_t ZAPPR_R5[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 2.0f, 4.5f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 8.0f, 18.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.3f, 0.75f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}};
+static const syn_rv_t ZAPPR_R6[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.4f, 1.2f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 3.0f, 8.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}};
+static const syn_rv_t ZAPPR_R7[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.4f, 0.75f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.4f, 0.75f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.0f, 0.18f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}};
+static const syn_recipe_t ZAPPR_RECIPES[8] = {
+    {"STATIC SPARK", ZAPPR_R0, 9},
+    {"TESLA COIL", ZAPPR_R1, 9},
+    {"POWER SHORT", ZAPPR_R2, 9},
+    {"LIGHTNING ARC", ZAPPR_R3, 9},
+    {"STUN BATON", ZAPPR_R4, 9},
+    {"REACTOR", ZAPPR_R5, 9},
+    {"MAGIC SPARK", ZAPPR_R6, 9},
+    {"FUSE BLOW", ZAPPR_R7, 9},
+};
+
+enum { SIGNLR_masterVolume, SIGNLR_seed, SIGNLR_encoding, SIGNLR_duration, SIGNLR_carrier, SIGNLR_deviation, SIGNLR_symbols, SIGNLR_packets, SIGNLR_gap, SIGNLR_drift, SIGNLR_corruption, SIGNLR_interference, SIGNLR_echo, SIGNLR_NP };
+static const syn_param_t SIGNLR_P[13] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"encoding", "ENCODING", 0.0f, 0.0f, 4.0f, "FSK|PHASE|CHIRP|RADIO|PING", 0},
+    {"duration", "DURATION", 1.4f, 0.15f, 5.0f, 0, 0},
+    {"carrier", "CARRIER", 0.55f, 0.0f, 1.0f, 0, 0},
+    {"deviation", "DEVIATION", 0.35f, 0.0f, 1.0f, 0, 0},
+    {"symbols", "SYMBOL RATE", 0.4f, 0.0f, 1.0f, 0, 0},
+    {"packets", "PACKETS", 3.0f, 1.0f, 12.0f, 0, 1},
+    {"gap", "PACKET GAP", 0.25f, 0.0f, 0.85f, 0, 0},
+    {"drift", "DRIFT", 0.0f, -1.0f, 1.0f, 0, 0},
+    {"corruption", "CORRUPTION", 0.08f, 0.0f, 1.0f, 0, 0},
+    {"interference", "INTERFERENCE", 0.08f, 0.0f, 1.0f, 0, 0},
+    {"echo", "ECHO", 0.15f, 0.0f, 1.0f, 0, 0},
+};
+static const syn_rv_t SIGNLR_R0[10] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.45f, 0.7f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.04f, 0.3f, 0}, {SIGNLR_packets, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {SIGNLR_drift, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_interference, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_corruption, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.08f, 0.3f, 0}};
+static const syn_rv_t SIGNLR_R1[10] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.6f, 0.85f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {SIGNLR_packets, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.65f, 0.82f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {SIGNLR_interference, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_corruption, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}};
+static const syn_rv_t SIGNLR_R2[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 1.4f, 3.2f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.22f, 0.45f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.06f, 0.2f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.02f, 0.15f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.22f, -0.04f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.05f, 0.18f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.04f, 0.2f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}};
+static const syn_rv_t SIGNLR_R3[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.65f, 1.7f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.48f, 0.75f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.5f, 0.95f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.25f, 0.58f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.3f, 0.4f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.08f, 0.35f, 0}};
+static const syn_rv_t SIGNLR_R4[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.6f, 1.5f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.45f, 0.66f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.1f, 0.28f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.05f, 0.22f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.3f, 0.56f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.08f, 0.08f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.08f, 0.25f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}};
+static const syn_rv_t SIGNLR_R5[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 1.0f, 2.5f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.4f, 0.95f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.8f, 0.65f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}};
+static const syn_rv_t SIGNLR_R6[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 1.4f, 3.5f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.43f, 0.65f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.28f, 0.58f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.12f, 0.12f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.0f, 0.02f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.0f, 0.03f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}};
+static const syn_rv_t SIGNLR_R7[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.25f, 0.85f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.55f, 0.82f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.08f, 0.3f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.05f, 0.05f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.01f, 0.08f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const syn_rv_t SIGNLR_R8[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 1.5f, 3.6f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.12f, 0.3f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, -0.95f, -0.35f, 0}, {SIGNLR_corruption, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {SIGNLR_interference, SYN_RV_RANGE, 0, 0.06f, 0.25f, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}};
+static const syn_rv_t SIGNLR_R9[11] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.3f, 0.85f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.45f, 0.65f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {SIGNLR_symbols, SYN_RV_RANGE, 0, 0.18f, 0.38f, 0}, {SIGNLR_packets, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.12f, 0.28f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {SIGNLR_corruption, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_interference, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.03f, 0.2f, 0}};
+static const syn_recipe_t SIGNLR_RECIPES[10] = {
+    {"RADAR BLIP", SIGNLR_R0, 10},
+    {"TARGET LOCK", SIGNLR_R1, 10},
+    {"DERELICT BEACON", SIGNLR_R2, 11},
+    {"ALIEN HANDSHAKE", SIGNLR_R3, 11},
+    {"DISTRESS BURST", SIGNLR_R4, 11},
+    {"BROKEN RADIO", SIGNLR_R5, 11},
+    {"SONAR MAP", SIGNLR_R6, 11},
+    {"ENCRYPTED PACKET", SIGNLR_R7, 11},
+    {"LOST SATELLITE", SIGNLR_R8, 11},
+    {"SAVE TERMINAL", SIGNLR_R9, 11},
+};
+
+enum { PLUCKR_masterVolume, PLUCKR_seed, PLUCKR_material, PLUCKR_duration, PLUCKR_pitch, PLUCKR_strings, PLUCKR_damping, PLUCKR_brightness, PLUCKR_pluck, PLUCKR_coupling, PLUCKR_strum, PLUCKR_tremolo, PLUCKR_vibrato, PLUCKR_tremoloRate, PLUCKR_inharmonic, PLUCKR_NP };
+static const syn_param_t PLUCKR_P[15] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"material", "STRING", 0.0f, 0.0f, 4.0f, "NYLON|STEEL|GUT|RUBBER|GLASS", 0},
+    {"duration", "DURATION", 1.8f, 0.15f, 5.0f, 0, 0},
+    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"strings", "STRINGS", 3.0f, 1.0f, 8.0f, 0, 1},
+    {"damping", "DAMPING", 0.25f, 0.0f, 1.0f, 0, 0},
+    {"brightness", "BRIGHTNESS", 0.6f, 0.0f, 1.0f, 0, 0},
+    {"pluck", "PLUCK POINT", 0.3f, 0.0f, 1.0f, 0, 0},
+    {"coupling", "COUPLING", 0.15f, 0.0f, 1.0f, 0, 0},
+    {"strum", "STRUM", 0.2f, 0.0f, 1.0f, 0, 0},
+    {"tremolo", "TREMOLO VOLUME", 0.0f, 0.0f, 1.0f, 0, 0},
+    {"vibrato", "VIBRATO PITCH", 0.0f, 0.0f, 1.0f, 0, 0},
+    {"tremoloRate", "MOTION SPEED", 4.0f, 0.2f, 12.0f, 0, 0},
+    {"inharmonic", "LOOSE TUNING", 0.05f, 0.0f, 1.0f, 0, 0},
+};
+static const float PLUCKR_R0_material[2] = {0.0f, 2.0f};
+static const syn_rv_t PLUCKR_R0[10] = {{PLUCKR_material, SYN_RV_PICK, 2, 0, 0, PLUCKR_R0_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.01f, 0.08f, 0}};
+static const float PLUCKR_R1_material[2] = {1.0f, 4.0f};
+static const syn_rv_t PLUCKR_R1[10] = {{PLUCKR_material, SYN_RV_PICK, 2, 0, 0, PLUCKR_R1_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 0.7f, 1.6f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 1.0f, 2.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.25f, 0.5f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.02f, 0.14f, 0}};
+static const float PLUCKR_R2_material[3] = {0.0f, 2.0f, 3.0f};
+static const syn_rv_t PLUCKR_R2[10] = {{PLUCKR_material, SYN_RV_PICK, 3, 0, 0, PLUCKR_R2_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 0.4f, 0.9f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.2f, 0.48f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.7f, 0.94f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.12f, 0.38f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.08f, 0.22f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.03f, 0.15f, 0}};
+static const syn_rv_t PLUCKR_R3[10] = {{PLUCKR_material, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {PLUCKR_duration, SYN_RV_RANGE, 0, 1.4f, 3.5f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.02f, 0.18f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.02f, 0.2f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.04f, 0.2f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}};
+static const syn_rv_t PLUCKR_R4[10] = {{PLUCKR_material, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {PLUCKR_duration, SYN_RV_RANGE, 0, 2.0f, 4.5f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 5.0f, 8.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.02f, 0.16f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.2f, 0.65f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}};
+static const float PLUCKR_R5_material[3] = {0.0f, 2.0f, 3.0f};
+static const syn_rv_t PLUCKR_R5[10] = {{PLUCKR_material, SYN_RV_PICK, 3, 0, 0, PLUCKR_R5_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 0.8f, 2.4f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.02f, 0.2f, 0}, {PLUCKR_strings, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.08f, 0.3f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {PLUCKR_strum, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.01f, 0.12f, 0}};
+static const float PLUCKR_R6_material[2] = {2.0f, 3.0f};
+static const syn_rv_t PLUCKR_R6[10] = {{PLUCKR_material, SYN_RV_PICK, 2, 0, 0, PLUCKR_R6_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 0.6f, 1.5f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.12f, 0.5f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.5f, 0.95f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.02f, 0.9f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.4f, 0.9f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.2f, 0.7f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}};
+static const float PLUCKR_R7_material[3] = {0.0f, 1.0f, 4.0f};
+static const syn_rv_t PLUCKR_R7[10] = {{PLUCKR_material, SYN_RV_PICK, 3, 0, 0, PLUCKR_R7_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 0.8f, 1.8f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.45f, 0.7f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 3.0f, 5.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.15f, 0.35f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.02f, 0.12f, 0}};
+static const syn_recipe_t PLUCKR_RECIPES[8] = {
+    {"HARP", PLUCKR_R0, 10},
+    {"KALIMBA", PLUCKR_R1, 10},
+    {"MUTED GUITAR", PLUCKR_R2, 10},
+    {"METAL STRING", PLUCKR_R3, 10},
+    {"MAGIC HARP", PLUCKR_R4, 10},
+    {"BASS PLUCK", PLUCKR_R5, 10},
+    {"BROKEN STRING", PLUCKR_R6, 10},
+    {"QUEST PLUCK", PLUCKR_R7, 10},
+};
+
+enum { RUSTLR_masterVolume, RUSTLR_seed, RUSTLR_material, RUSTLR_gesture, RUSTLR_duration, RUSTLR_grain, RUSTLR_density, RUSTLR_motion, RUSTLR_pressure, RUSTLR_folds, RUSTLR_brightness, RUSTLR_NP };
+static const syn_param_t RUSTLR_P[11] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"material", "MATERIAL", 0.0f, 0.0f, 5.0f, "PAPER|CLOTH|LEATHER|PLASTIC|FOIL|ZIP", 0},
+    {"gesture", "GESTURE", 1.0f, 0.0f, 3.0f, "FLICK|TURN|SLIDE|CRUMPLE", 0},
+    {"duration", "DURATION", 0.65f, 0.08f, 3.0f, 0, 0},
+    {"grain", "GRAIN", 0.45f, 0.0f, 1.0f, 0, 0},
+    {"density", "DENSITY", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"motion", "MOTION", 0.0f, -1.0f, 1.0f, 0, 0},
+    {"pressure", "PRESSURE", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"folds", "FOLDS", 3.0f, 1.0f, 12.0f, 0, 1},
+    {"brightness", "BRIGHTNESS", 0.5f, 0.0f, 1.0f, 0, 0},
+};
+static const syn_rv_t RUSTLR_R0[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.12f, 0.24f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.12f, 0.36f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.4f, 0.2f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 1.0f, 2.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.52f, 0.85f, 0}};
+static const syn_rv_t RUSTLR_R1[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.35f, 0.68f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.5f, 0.83f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.25f, 0.45f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.38f, 0.7f, 0}};
+static const float RUSTLR_R2_material[2] = {1.0f, 2.0f};
+static const syn_rv_t RUSTLR_R2[9] = {{RUSTLR_material, SYN_RV_PICK, 2, 0, 0, RUSTLR_R2_material}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.38f, 0.8f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.55f, 0.88f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, 0.1f, 0.7f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 2.0f, 5.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.22f, 0.55f, 0}};
+static const float RUSTLR_R3_gesture[2] = {1.0f, 3.0f};
+static const syn_rv_t RUSTLR_R3[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_PICK, 2, 0, 0, RUSTLR_R3_gesture}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.35f, 0.68f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.48f, 0.8f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.25f, 0.35f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.62f, 0.9f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}};
+static const float RUSTLR_R4_material[3] = {0.0f, 2.0f, 3.0f};
+static const syn_rv_t RUSTLR_R4[9] = {{RUSTLR_material, SYN_RV_PICK, 3, 0, 0, RUSTLR_R4_material}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.2f, 0.46f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.18f, 0.45f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.65f, 0.93f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.65f, 0.3f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.35f, 0.64f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}};
+static const syn_rv_t RUSTLR_R5[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.32f, 0.72f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.2f, 0.55f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.62f, 0.95f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}};
+static const float RUSTLR_R6_material[2] = {3.0f, 4.0f};
+static const syn_rv_t RUSTLR_R6[9] = {{RUSTLR_material, SYN_RV_PICK, 2, 0, 0, RUSTLR_R6_material}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.38f, 0.85f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.18f, 0.48f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.4f, 0.75f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.25f, 0.4f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.42f, 0.72f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 4.0f, 9.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.6f, 0.93f, 0}};
+static const syn_rv_t RUSTLR_R7[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.25f, 0.62f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.06f, 0.27f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.24f, 0.58f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.45f, 0.65f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.48f, 0.8f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}};
+static const syn_recipe_t RUSTLR_RECIPES[8] = {
+    {"CARD FLICK", RUSTLR_R0, 9},
+    {"PAGE TURN", RUSTLR_R1, 9},
+    {"BAG OPEN", RUSTLR_R2, 9},
+    {"EQUIP GEAR", RUSTLR_R3, 9},
+    {"ITEM SLIDE", RUSTLR_R4, 9},
+    {"CLOTH FOLD", RUSTLR_R5, 9},
+    {"WRAPPER", RUSTLR_R6, 9},
+    {"ZIP POUCH", RUSTLR_R7, 9},
+};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 8u
+#define SYN_NPRESET 12u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES},
@@ -311,4 +463,8 @@ const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"SWARMR", "Swarmr", 11, SWARMR_P, 8, SWARMR_RECIPES},
     {"MACHINR", "Machinr", 11, MACHINR_P, 8, MACHINR_RECIPES},
     {"CRITTR", "Crittr", 13, CRITTR_P, 10, CRITTR_RECIPES},
+    {"ZAPPR", "Zappr", 11, ZAPPR_P, 8, ZAPPR_RECIPES},
+    {"SIGNLR", "Signlr", 13, SIGNLR_P, 10, SIGNLR_RECIPES},
+    {"PLUCKR", "Pluckr", 15, PLUCKR_P, 8, PLUCKR_RECIPES},
+    {"RUSTLR", "Rustlr", 11, RUSTLR_P, 8, RUSTLR_RECIPES},
 };

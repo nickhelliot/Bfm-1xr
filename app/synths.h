@@ -40,7 +40,7 @@ typedef struct {
 } syn_engine_t;
 
 #define SYN_MAXP 16u                     /* the most parameters a preset synth has */
-#define SYN_STATE_BYTES 20480u           /* the largest synth state (Breathr's echo) */
+#define SYN_STATE_BYTES 32768u           /* the largest synth state (shared with the Bfxr voices: app.c) */
 
 /* bfxr2's seeded random numbers (SoundDSP.rng, mulberry32) */
 typedef struct { uint32_t s; } syn_rng_t;

@@ -216,6 +216,17 @@ static NOINL float ff_frac_mul(const ff_t *x, float k)     /* the fraction of x 
     f += e + x->lo * k;
     return f - fm_floorf(f);
 }
+static inline ff_t ff_two_prod(float a, float b)         /* a * b exactly */
+{
+    ff_t r;
+    float ah, al, bh, bl;
+    r.hi = a * b;
+    ff_split(a, &ah, &al);
+    ff_split(b, &bh, &bl);
+    r.lo = ((ah * bh - r.hi) + ah * bl + al * bh) + al * bl;
+    return r;
+}
+static inline int ff_ge(ff_t a, ff_t b) { return (a.hi - b.hi) + (a.lo - b.lo) >= 0.0f; }
 static inline float ff_sin(const ff_t *x, float k) { return fm_sin_turns(ff_frac_mul(x, k)); }   /* sin(2 pi x k) */
 static inline float ff_floor(const ff_t *x)
 {
@@ -1219,6 +1230,702 @@ static void crittr_run(void *st, float *out, uint32_t n)
     }
 }
 
+/* ---- Zappr: seeded leader arcs splitting into branches, over an unstable mains field ---- */
+#define ZA_MAXE 192
+typedef struct {
+    syn_rng_t rng;
+    uint32_t start, len;
+    float life, freq, gain, phase, low;
+} zappr_event_t;
+typedef struct {
+    syn_rng_t rng;                       /* the field's (the crackle's) */
+    uint32_t i, frames, nev;
+    float duration, voltage, crackle, hum, spark, decay, hum_step, crackle_fall, crackle_p, tail;
+    float phase, crackle_env, noise_low;
+    zappr_event_t ev[ZA_MAXE];
+} zappr_t;
+
+static COLD uint32_t zappr_begin(void *st, const float *p)
+{
+    zappr_t *z = st;
+    syn_rng_t rng;
+    uint32_t arcs, k;
+    float branching, spread;
+    z->duration = syn_clamp(p[ZAPPR_duration], 0.12f, 5.0f);
+    z->frames = syn_len(z->duration);
+    arcs = (uint32_t)fm_floorf(syn_clamp(p[ZAPPR_arcs], 1, 24) + 0.5f);
+    z->voltage = syn_clamp(p[ZAPPR_voltage], 0, 1);
+    branching = syn_clamp(p[ZAPPR_branching], 0, 1);
+    z->crackle = syn_clamp(p[ZAPPR_crackle], 0, 1);
+    z->hum = syn_clamp(p[ZAPPR_hum], 0, 1);
+    z->spark = syn_clamp(p[ZAPPR_spark], 0, 1);
+    spread = syn_clamp(p[ZAPPR_spread], 0, 1);
+    z->decay = syn_clamp(p[ZAPPR_decay], 0, 1);
+    syn_rng_seed(&rng, syn_clamp(p[ZAPPR_seed], 0, 1));
+    z->nev = 0;
+    for (uint32_t arc = 0; arc < arcs; arc++) {  /* the arcs and their branches: when, how long, how high, how loud */
+        float position = arc == 0 ? 0.004f : ((float)arc + syn_rnd(&rng) * 0.65f) / (float)arcs * z->duration *
+                                             (0.03f + spread * 0.86f);
+        float life = 0.008f + z->decay * 0.1f, freq = 400.0f + z->voltage * 4800.0f * (0.6f + syn_rnd(&rng) * 0.8f);
+        uint32_t branches;
+        zappr_event_t *e = &z->ev[z->nev++];
+        e->start = (uint32_t)fm_floorf(position * RATE + 0.5f);
+        e->life = life;
+        e->freq = freq;
+        e->gain = 0.55f + syn_rnd(&rng) * 0.4f;
+        branches = (uint32_t)fm_floorf(branching * (2.0f + syn_rnd(&rng) * 5.0f) + 0.5f);
+        for (uint32_t b = 0; b < branches && z->nev < ZA_MAXE; b++) {
+            zappr_event_t *f = &z->ev[z->nev++];
+            float at = position + life * (0.3f + syn_rnd(&rng) * 2.0f);
+            f->start = (uint32_t)fm_floorf(at * RATE + 0.5f);
+            f->life = life * (0.18f + syn_rnd(&rng) * 0.55f);
+            f->freq = freq * (0.5f + syn_rnd(&rng) * 1.2f);
+            f->gain = branching * (0.15f + syn_rnd(&rng) * 0.25f);
+        }
+    }
+    z->rng = rng;                                /* the field: a noise, a crackle's chance, its strength if it cracks */
+    z->crackle_p = z->crackle * (12.0f + z->voltage * 130.0f) / RATE;
+    for (uint32_t i = 0; i < z->frames; i++) {   /* (its draws counted, for the arcs' place in the rng after it) */
+        (void)syn_rnd(&rng);
+        if (syn_rnd(&rng) < z->crackle_p)
+            (void)syn_rnd(&rng);
+    }
+    for (k = 0; k < z->nev; k++) {
+        zappr_event_t *e = &z->ev[k];
+        float span = e->life * RATE * 6.0f, c = fm_floorf(span);
+        uint32_t len = (uint32_t)(c < span ? c + 1.0f : c);
+        e->len = e->start >= z->frames ? 0 : len < z->frames - e->start ? len : z->frames - e->start;
+        e->phase = syn_rnd(&rng) * TAU;
+        e->low = 0;
+        e->rng = rng;
+        rng_skip(&rng, e->len);
+    }
+    z->hum_step = TAU * (42.0f + z->voltage * 65.0f) / RATE;
+    z->crackle_fall = fm_expf(-1.0f / (RATE * (0.001f + z->decay * 0.014f)));
+    z->tail = 0.2f + z->decay * 0.6f;
+    z->phase = z->crackle_env = z->noise_low = 0;
+    z->i = 0;
+    return z->frames;
+}
+
+static void zappr_run(void *st, float *out, uint32_t n)
+{
+    zappr_t *z = st;
+    for (uint32_t k = 0; k < n; k++) {           /* the field and the crackle */
+        uint32_t i = z->i + k;
+        float t = (float)i / RATE, noise = syn_rnd(&z->rng) * 2.0f - 1.0f, field, r, x;
+        z->noise_low += 0.075f * (noise - z->noise_low);
+        z->phase += z->hum_step;
+        if (z->phase > TAU)
+            z->phase -= TAU;
+        if (syn_rnd(&z->rng) < z->crackle_p)
+            z->crackle_env = 0.15f + syn_rnd(&z->rng) * 0.55f;
+        z->crackle_env *= z->crackle_fall;
+        r = z->phase > PI ? z->phase - TAU : z->phase;
+        x = fm_sin_pi(r);
+        field = z->hum * (x + 0.28f * x * (3.0f - 4.0f * x * x) + 0.15f * fm_sinf(z->phase * 7.0f)) * 0.27f;
+        out[k] = (field + z->crackle_env * (noise - z->noise_low) * z->crackle) * fm_minf(1.0f, t / 0.006f) *
+                 fm_powf(fm_maxf(0.0f, 1.0f - t / z->duration), z->tail);
+    }
+    for (uint32_t ei = 0; ei < z->nev; ei++) {   /* the arcs, in their order */
+        zappr_event_t *e = &z->ev[ei];
+        uint32_t a = z->i > e->start ? z->i : e->start, end = e->start + e->len, b = z->i + n < end ? z->i + n : end;
+        float dk, d, rs = 75.0f + z->voltage * 290.0f;
+        if (a >= b)
+            continue;
+        d = fm_expf(-(float)(a - e->start) / RATE / e->life);
+        dk = fm_expf(-1.0f / (RATE * e->life));
+        for (uint32_t i = a; i < b; i++) {
+            uint32_t j = i - e->start;
+            float age = (float)j / RATE, noise = syn_rnd(&e->rng) * 2.0f - 1.0f, discharge, restrike, tt;
+            e->phase += TAU * e->freq * (0.3f + 0.7f * d) / RATE;
+            if (e->phase > TAU)
+                e->phase -= TAU;
+            e->low += 0.2f * (noise - e->low);
+            discharge = (0.4f + z->spark * 0.5f) * (noise - e->low) +
+                        fm_sinf(e->phase + fm_sinf(e->phase * 0.47f) * z->voltage * 2.0f) * (1.0f - z->spark * 0.65f);
+            tt = age * rs;
+            restrike = 0.65f + 0.35f * fm_maxf(0.0f, fm_sin_turns(tt - fm_floorf(tt)));
+            out[i - z->i] += discharge * e->gain * d * restrike * fm_minf(1.0f, (float)j / 12.0f);
+            d = fm_flush(d * dk);
+        }
+    }
+    z->i += n;
+}
+
+/* ---- Signlr: packets of symbols, frequency or phase coded, with dropouts and radio echoes; or sonar pings ---- */
+#define SI_HIST 9100u
+typedef struct {
+    syn_rng_t rng;
+    uint32_t i, length, encoding, packets, delay_a, delay_b;
+    float carrier, deviation, drift, interference, corruption, echo, symbol_samples, slot, active, edge, symbol_edge;
+    float carrier0, het_step, heterodyne, bit, symbol_gain, phase_code, scramble, noise_low, radio_low;
+    int32_t last_symbol, last_packet;
+    uint32_t packet, symbol;             /* where it is, worked out exactly (bfxr2 does it in double) */
+    ff_t symbols;                        /* symbols a second */
+    ff_t phase;                          /* in turns */
+    /* the pings */
+    float ratios[4], weights[4], phases[4], ring, step, root, color, echo_g;
+    uint32_t echo_d[4];
+    int16_t hist[SI_HIST];               /* the output, for the echoes (16 bits: -8 .. 8) */
+} signlr_t;
+
+static COLD uint32_t signlr_begin(void *st, const float *p)
+{
+    signlr_t *g = st;
+    float seed = syn_clamp(p[SIGNLR_seed], 0, 1), symbols, gap;
+    g->length = syn_len(syn_clamp(p[SIGNLR_duration], 0.15f, 5.0f));
+    syn_rng_seed(&g->rng, seed);
+    g->encoding = (uint32_t)fm_floorf(syn_clamp(p[SIGNLR_encoding], 0, 4) + 0.5f);
+    g->packets = (uint32_t)fm_floorf(syn_clamp(p[SIGNLR_packets], 1, 12) + 0.5f);
+    g->drift = syn_clamp(p[SIGNLR_drift], -1, 1);
+    g->echo = syn_clamp(p[SIGNLR_echo], 0, 1);
+    g->deviation = syn_clamp(p[SIGNLR_deviation], 0, 1);
+    gap = syn_clamp(p[SIGNLR_gap], 0, 0.85f);
+    g->i = 0;
+    if (g->encoding == 4) {                      /* pings: one struck resonator, shared by the whole scan */
+        float duration = syn_clamp(p[SIGNLR_duration], 0.15f, 5.0f), fall = gap;
+        static const float W0[4] = {0.8f, 0.06f, 0.03f, 0.02f}, WC[4] = {0, 0.28f, 0.17f, 0.1f};
+        g->root = 170.0f * fm_exp2f(syn_clamp(p[SIGNLR_carrier], 0, 1) * 4.1f);
+        g->color = g->deviation;
+        g->ratios[0] = 1;
+        g->ratios[1] = 2.01f + syn_rnd(&g->rng) * 0.12f;
+        g->ratios[2] = 3.1f + syn_rnd(&g->rng) * 1.7f;
+        g->ratios[3] = 5.2f + syn_rnd(&g->rng) * 2.2f;
+        for (uint32_t h = 0; h < 4; h++) {
+            g->weights[h] = W0[h] + g->color * WC[h];
+            g->phases[h] = syn_rnd(&g->rng) * TAU;
+        }
+        g->ring = 0.045f + (1.0f - fall) * 0.6f;
+        g->step = duration / (float)g->packets;
+        g->echo_g = g->echo * 0.52f;
+        for (uint32_t r = 1; r <= 3; r++)
+            g->echo_d[r] = (uint32_t)fm_floorf(RATE * (0.062f + seed * 0.055f) * (float)r + 0.5f);
+        return g->length;
+    }
+    g->carrier = 90.0f * fm_exp2f(syn_clamp(p[SIGNLR_carrier], 0, 1) * 5.7f);
+    g->interference = syn_clamp(p[SIGNLR_interference], 0, 1);
+    g->corruption = syn_clamp(p[SIGNLR_corruption], 0, 1);
+    symbols = syn_clamp(p[SIGNLR_symbols], 0, 1);
+    {
+        ff_t x2 = ff_two_prod(symbols, symbols), m = ff_two_prod(176.0f, x2.hi);
+        m.lo += 176.0f * x2.lo;
+        g->symbols.hi = m.hi + 4.0f;
+        g->symbols.lo = m.lo + ((4.0f - g->symbols.hi) + m.hi);
+    }
+    symbols = 4.0f + 176.0f * symbols * symbols;
+    g->symbol_samples = RATE / symbols;
+    g->packet = 0;
+    g->symbol = 0;
+    g->slot = (float)g->length / (float)g->packets;
+    g->active = g->slot * (1.0f - gap);
+    g->edge = fm_minf(RATE * 0.005f, g->active * 0.12f);
+    g->symbol_edge = fm_minf(RATE * 0.0007f, g->symbol_samples * 0.06f);
+    g->delay_a = (uint32_t)fm_floorf(RATE * (0.073f + seed * 0.041f) + 0.5f);
+    g->delay_b = (uint32_t)fm_floorf((float)g->delay_a * 1.79f + 0.5f);
+    g->phase.hi = syn_rnd(&g->rng);
+    g->phase.lo = 0;
+    g->last_symbol = g->last_packet = -1;
+    g->bit = g->symbol_gain = 1;
+    g->noise_low = g->radio_low = g->phase_code = g->scramble = 0;
+    g->carrier0 = g->carrier * fm_exp2f(-g->drift * 0.5f);
+    g->het_step = (g->carrier * 1.013f + 37.0f) / RATE;   /* in turns */
+    g->heterodyne = syn_rnd(&g->rng);
+    for (uint32_t k = 0; k < SI_HIST; k++)
+        g->hist[k] = 0;
+    return g->length;
+}
+
+static float signlr_ping(const signlr_t *g, uint32_t packet, uint32_t i)   /* a ping's sample i, before its echoes */
+{
+    float f = g->root * fm_exp2f(g->drift * (float)packet / (float)(g->packets > 1u ? g->packets - 1u : 1u));
+    float t = (float)i / RATE, attack = 1.0f - fm_expf(-t / 0.0007f), sample = 0;
+    float bend = g->color * 0.0008f * (1.0f - fm_expf(-t / 0.006f));
+    for (uint32_t h = 0; h < 4; h++) {
+        float fr = f * g->ratios[h], x;
+        if (fr > 18000.0f)
+            continue;
+        x = fr * (float)i / RATE;                /* in turns: the whole turns dropped first */
+        x = (x - fm_floorf(x)) + fr * bend + g->phases[h] * ITAU;
+        sample += fm_sin_turns(x - fm_floorf(x)) * g->weights[h] * fm_expf(-t * (1.0f + (float)h * 1.4f) / g->ring);
+    }
+    return sample * attack * 0.7f;
+}
+
+static void signlr_run(void *st, float *out, uint32_t n)
+{
+    signlr_t *g = st;
+    if (g->encoding == 4) {                      /* the pings and their three echoes */
+        float span = RATE * g->ring * 6.0f;
+        for (uint32_t k = 0; k < n; k++) {
+            uint32_t i = g->i + k;
+            float x = 0;
+            for (uint32_t pk = 0; pk < g->packets; pk++) {
+                uint32_t start = (uint32_t)fm_floorf((float)pk * g->step * RATE + 0.5f);
+                float g_r = 1.0f;
+                if (i < start)
+                    break;
+                for (uint32_t r = 0; r <= 3; r++) {
+                    uint32_t d = r ? g->echo_d[r] : 0, j;
+                    if (r)
+                        g_r *= g->echo_g;
+                    if (i < start + d)
+                        break;
+                    j = i - start - d;
+                    if ((float)j < span && j < g->length - start)
+                        x += signlr_ping(g, pk, j) * g_r;
+                }
+            }
+            out[k] = x;
+        }
+        g->i += n;
+        return;
+    }
+    {
+        /* the carrier's drift: exact at the block's start, stepped from there */
+        float carrier = g->carrier0 * fm_exp2f(g->drift * (float)g->i / (float)g->length);
+        float dstep = fm_exp2f(g->drift / (float)g->length);
+        for (uint32_t k = 0; k < n; k++, g->i++) {
+            uint32_t i = g->i, packet, num;
+            float local, pos, unit, f, noise, enc, pe, be, radio, sample, ph;
+            int32_t symbol;
+            /* the packet, i / (length / packets), and the symbol, (i - packet * slot) / (RATE / symbols): exactly */
+            packet = i * g->packets / g->length;
+            if (packet > g->packets - 1u)
+                packet = g->packets - 1u;
+            if (packet != g->packet) {
+                g->packet = packet;
+                g->symbol = 0;
+            }
+            num = i * g->packets - packet * g->length;          /* local * packets, a whole number */
+            {
+                ff_t a = ff_two_prod((float)num, g->symbols.hi);
+                a.lo += (float)num * g->symbols.lo;
+                while (ff_ge(a, ff_two_prod((float)(g->symbol + 1u), RATE * (float)g->packets)))
+                    g->symbol++;
+            }
+            symbol = (int32_t)g->symbol;
+            local = (float)num / (float)g->packets;
+            pos = local - (float)symbol * g->symbol_samples;
+            unit = pos / g->symbol_samples;
+            if ((int32_t)packet != g->last_packet || symbol != g->last_symbol) {
+                g->last_packet = (int32_t)packet;
+                g->last_symbol = symbol;
+                g->bit = symbol < 4 ? (((uint32_t)symbol + packet) % 2u ? 1.0f : -1.0f)   /* a sync word, then the payload */
+                                    : (syn_rnd(&g->rng) < 0.5f ? -1.0f : 1.0f);
+                g->symbol_gain = syn_rnd(&g->rng) < g->corruption * 0.85f ? 0.025f : 1.0f;
+                g->phase_code = g->bit > 0 ? 0.0f : PI;
+                g->scramble = g->corruption * (syn_rnd(&g->rng) * 2.0f - 1.0f);
+            }
+            f = carrier;
+            if (g->encoding == 0)
+                f *= fm_exp2f(g->deviation * g->bit * 0.7f + g->scramble * 0.2f);
+            if (g->encoding == 2)
+                f *= fm_exp2f(g->deviation * (1.0f - unit * 2.0f) + g->scramble * 0.2f);
+            if (g->encoding == 3)
+                f *= 1.0f + g->deviation * 0.3f * g->bit;
+            ff_add(&g->phase, fm_minf(14000.0f, fm_maxf(30.0f, f)) / RATE);
+            carrier *= dstep;
+            g->heterodyne += g->het_step;
+            if (g->heterodyne >= 1.0f)
+                g->heterodyne -= 1.0f;
+            noise = syn_rnd(&g->rng) * 2.0f - 1.0f;
+            g->noise_low += (noise - g->noise_low) * 0.08f;
+            ph = ff_frac_mul(&g->phase, 1.0f);
+            if (g->encoding == 1)
+                enc = fm_sin_turns(ph + g->phase_code * (0.25f + g->deviation * 0.75f) * ITAU);
+            else if (g->encoding == 2)
+                enc = fm_sin_turns(ph) * fm_expf(-unit * (5.0f + g->deviation * 5.0f));
+            else if (g->encoding == 3)
+                enc = fm_sin_turns(ph) * (0.62f + 0.38f * fm_sin_turns(ff_frac_mul(&g->phase, 0.037f) + g->bit * ITAU));
+            else
+                enc = fm_sin_turns(ph) + 0.08f * g->deviation * ff_sin(&g->phase, 2.0f);
+            pe = fm_maxf(0.0f, fm_minf(1.0f, fm_minf(local / g->edge, (g->active - local) / g->edge)));
+            be = g->encoding == 2 ? fm_minf(1.0f, pos / g->symbol_edge)
+                                  : 0.88f + 0.12f * fm_minf(1.0f, fm_minf(pos / g->symbol_edge,
+                                                                          (g->symbol_samples - pos) / g->symbol_edge));
+            radio = (noise - g->noise_low) * 0.22f + fm_sin_turns(g->heterodyne) * 0.14f;
+            sample = enc * 0.52f * g->symbol_gain * pe * be + radio * g->interference * (0.4f + 0.6f * pe);
+            g->radio_low += (sample - g->radio_low) * 0.3f;   /* a narrow receiver: radio mode's static rolled off */
+            if (g->encoding == 3)
+                sample = g->radio_low;
+            if (i >= g->delay_a)
+                sample += (float)g->hist[(i - g->delay_a) % SI_HIST] * (8.0f / 32767.0f) * g->echo * 0.38f;
+            if (i >= g->delay_b)
+                sample -= (float)g->hist[(i - g->delay_b) % SI_HIST] * (8.0f / 32767.0f) * g->echo * 0.17f;
+            g->hist[i % SI_HIST] = (int16_t)(fm_clampf(sample, -8.0f, 8.0f) * (32767.0f / 8.0f));
+            out[k] = sample;
+        }
+    }
+}
+
+/* atan2 for a synth's setup (Cephes' atanf: 1e-7) */
+static COLD float s_atan2f(float y, float x)
+{
+    float ax = fm_fabsf(x), ay = fm_fabsf(y), a, r = 0, z, t;
+    if (ax == 0 && ay == 0)
+        return 0;
+    a = ay > ax ? ax / ay : ay / ax;             /* 0 .. 1 */
+    if (a > 0.414213562f) {
+        t = (a - 1.0f) / (a + 1.0f);
+        r = 0.785398163f;
+    } else
+        t = a;
+    z = t * t;
+    r += (((8.05374449538e-2f * z - 1.38776856032e-1f) * z + 1.99777106478e-1f) * z - 3.33329491539e-1f) * z * t + t;
+    if (ay > ax)
+        r = 1.57079633f - r;
+    if (x < 0)
+        r = PI - r;
+    return y < 0 ? -r : r;
+}
+
+/* ---- Pluckr: waveguide strings of a material, sharing a damped bridge, plucked into shape ---- */
+#define PL_POOL 2900u                    /* the strings' delay lines */
+#define PL_DRY 3120u                     /* the vibrato's look back */
+typedef struct {
+    uint32_t off, delay, index, start;
+    float previous, low, allpass, allpass_in, fraction, feedback, wave_in[2], wave_out[2];
+} pluckr_string_t;
+typedef struct {
+    uint32_t i, length, count, material, stages, dry_n;
+    float brightness, coupling, tremolo, vibrato, speed, gain, bridge, depth;
+    float average, filter, bright, dispersion;
+    pluckr_string_t s[8];
+    float buf[PL_POOL];
+    float dry[PL_DRY];                   /* the strings' sum, for the vibrato */
+} pluckr_t;
+
+static COLD uint32_t pluckr_begin(void *st, const float *p)
+{
+    static const struct { float life, average, filter, bright, excite, dispersion; uint8_t stages; } M[6] = {
+        {1, 0.5f, 0.18f, 0.8f, 1, 0, 0}, {1.45f, 0.14f, 0.65f, 0.35f, 1.5f, 0.2f, 1}, {0.62f, 0.55f, 0.12f, 0.5f, 0.6f, 0.6f, 1},
+        {0.075f, 0.65f, 0.1f, 0.28f, 0.35f, 0.4f, 1}, {1.3f, 0.06f, 0.85f, 0.15f, 1.8f, -0.72f, 2},
+        {0.95f, 0.25f, 0.4f, 0.5f, 1.1f, -0.45f, 2}};
+    static const float NOTES[8] = {0, 7, 12, 16, 19, 24, 28, 31};
+    pluckr_t *k = st;
+    syn_rng_t rng;
+    float pitch, damping, strum, pluck, inharmonic;
+    uint32_t off = 0;
+    k->length = syn_len(syn_clamp(p[PLUCKR_duration], 0.15f, 5.0f));
+    syn_rng_seed(&rng, syn_clamp(p[PLUCKR_seed], 0, 1));
+    k->count = (uint32_t)fm_floorf(syn_clamp(p[PLUCKR_strings], 1, 8) + 0.5f);
+    k->material = (uint32_t)fm_floorf(syn_clamp(p[PLUCKR_material], 0, 5) + 0.5f);
+    pitch = 55.0f * fm_exp2f(syn_clamp(p[PLUCKR_pitch], 0, 1) * 4.0f);
+    damping = syn_clamp(p[PLUCKR_damping], 0, 1);
+    k->brightness = syn_clamp(p[PLUCKR_brightness], 0, 1);
+    k->coupling = syn_clamp(p[PLUCKR_coupling], 0, 1);
+    strum = syn_clamp(p[PLUCKR_strum], 0, 1);
+    pluck = syn_clamp(p[PLUCKR_pluck], 0, 1);
+    inharmonic = syn_clamp(p[PLUCKR_inharmonic], 0, 1);
+    k->tremolo = syn_clamp(p[PLUCKR_tremolo], 0, 1);
+    k->vibrato = syn_clamp(p[PLUCKR_vibrato], 0, 1);
+    k->speed = syn_clamp(p[PLUCKR_tremoloRate], 0.2f, 12.0f);
+    k->average = M[k->material].average;
+    k->filter = M[k->material].filter;
+    k->bright = M[k->material].bright;
+    k->dispersion = M[k->material].dispersion;
+    k->stages = M[k->material].stages;
+    k->gain = 0.65f / fm_sqrtf((float)k->count);
+    for (uint32_t si = 0; si < k->count; si++) {
+        pluckr_string_t *g = &k->s[si];
+        float f = pitch * fm_exp2f(NOTES[si] / 12.0f + (syn_rnd(&rng) - 0.5f) * inharmonic * 0.07f);
+        float period = RATE / f, omega = TAU / period, a = k->dispersion, low = 0, mean = 0, loc = 0.05f + pluck * 0.9f;
+        float dd = (float)k->stages * 2.0f * s_atan2f((1.0f - a) * fm_sinf(omega / 2.0f), (1.0f + a) * fm_cosf(omega / 2.0f)) / omega;
+        float desired = fm_maxf(2.0f, period - k->average - dd), ex = fm_minf(1.0f, (0.05f + k->brightness * 0.9f) * M[k->material].excite);
+        uint32_t delay = (uint32_t)fm_maxf(2.0f, fm_floorf(desired));
+        if (off + delay > PL_POOL)
+            delay = PL_POOL - off;               /* (never, for the strings' pitches) */
+        g->off = off;
+        g->delay = delay;
+        for (uint32_t i = 0; i < delay; i++) {   /* the pluck: shaped noise and a triangle at the plucked place */
+            float x = (float)i / (float)delay, tri = x < loc ? x / loc : (1.0f - x) / (1.0f - loc);
+            low += (syn_rnd(&rng) * 2.0f - 1.0f - low) * ex;
+            k->buf[off + i] = low * 0.75f + (tri - 0.5f) * (1.0f - k->brightness) * 0.75f;
+            mean += k->buf[off + i];
+        }
+        mean /= (float)delay;
+        for (uint32_t i = 0; i < delay; i++)
+            k->buf[off + i] -= mean;
+        off += delay;
+        g->index = 0;
+        g->previous = g->low = g->allpass = g->allpass_in = 0;
+        g->wave_in[0] = g->wave_in[1] = g->wave_out[0] = g->wave_out[1] = 0;
+        g->fraction = (1.0f - (desired - (float)delay)) / (1.0f + (desired - (float)delay));
+        g->feedback = fm_expf(-3.0f / (f * (0.07f + (1.0f - damping) * (1.0f - damping) * 4.0f) * M[k->material].life));
+        g->start = (uint32_t)fm_floorf((float)si * strum * fm_minf(RATE * 0.11f, (float)k->length / (float)k->count * 0.65f) + 0.5f);
+    }
+    k->bridge = 0;
+    k->depth = (fm_exp2f(k->vibrato * 0.75f / 12.0f) - 1.0f) * RATE / (TAU * k->speed);
+    k->dry_n = (uint32_t)(k->depth * 2.0f) + 2u;
+    if (k->dry_n > PL_DRY)
+        k->dry_n = PL_DRY;
+    k->i = 0;
+    return k->length;
+}
+
+static void pluckr_run(void *st, float *out, uint32_t n)
+{
+    pluckr_t *k = st;
+    for (uint32_t q = 0; q < n; q++, k->i++) {
+        uint32_t i = k->i;
+        float sum = 0, bridge_next = 0, motion, dry;
+        float disp = k->dispersion + (k->material == 5 ? 0.22f * fm_sinf(TAU * 1.7f * (float)i / RATE) : 0.0f);
+        for (uint32_t si = 0; si < k->count; si++) {
+            pluckr_string_t *g = &k->s[si];
+            float cur, avg, in, d;
+            if (i < g->start)
+                continue;
+            cur = k->buf[g->off + g->index];
+            avg = cur * (1.0f - k->average) + g->previous * k->average;
+            g->previous = cur;
+            g->low += (avg - g->low) * (k->filter + k->brightness * k->bright);
+            in = g->low;
+            d = g->fraction * in + g->allpass_in - g->fraction * g->allpass;
+            g->allpass_in = in;
+            g->allpass = d;
+            for (uint32_t sg = 0; sg < k->stages; sg++) {
+                float nx = disp * d + g->wave_in[sg] - disp * g->wave_out[sg];
+                g->wave_in[sg] = d;
+                g->wave_out[sg] = nx;
+                d = nx;
+            }
+            k->buf[g->off + g->index] = g->feedback * (d * (1.0f - k->coupling * 0.025f) + k->bridge * k->coupling * 0.025f);
+            if (++g->index == g->delay)
+                g->index = 0;
+            sum += cur;
+            bridge_next += cur;
+        }
+        k->bridge = bridge_next / (float)k->count;
+        {
+            float x = k->speed * (float)i / RATE;
+            motion = 0.5f - 0.5f * fm_sin_turns(x - fm_floorf(x) + 0.25f);
+        }
+        dry = sum * k->gain;
+        if (k->vibrato <= 0) {
+            out[q] = dry * (1.0f - k->tremolo * motion);
+            continue;
+        }
+        k->dry[i % k->dry_n] = dry;              /* a smoothly moving delay bends the pitch */
+        {
+            float pos = fm_maxf(0.0f, (float)i - k->depth * 2.0f * motion), fr;
+            uint32_t idx = (uint32_t)pos, nx = idx + 1u < k->length ? idx + 1u : k->length - 1u;
+            fr = pos - (float)idx;
+            if (nx > i)                          /* (the sample after this one: not made yet, and dry[] is causal) */
+                nx = i;
+            out[q] = (k->dry[idx % k->dry_n] * (1.0f - fr) + k->dry[nx % k->dry_n] * fr) * (1.0f - k->tremolo * motion);
+        }
+    }
+}
+
+/* ---- Rustlr: friction gathers tension and lets go in slips and folds; each material its own give and loss ---- */
+#define RU_MAXG 2520                     /* grains and folds */
+#define RU_ACTIVE 160                    /* sounding at once */
+typedef struct { uint32_t rng, at; } rustlr_rec_t;   /* at: start << 12 | the grain's number */
+typedef struct {
+    syn_rng_t rng;
+    uint16_t idx;
+    uint8_t crease;
+    uint32_t start, length, j, end;
+    float strength, low, slow, flex, prev, decay, dk;
+} rustlr_grain_t;
+typedef struct {
+    syn_rng_t rng;                       /* the friction bed's */
+    uint32_t i, frames, kind, gesture, folds, count, ngr, next, nact;
+    float motion, pressure, filter, slow_filter, flex_filter, soft, highpass, crease, stick, flex_hz, gain, density;
+    float slip_loss, friction, friction_slow, shear, slip, motion_low, breakaway;
+    rustlr_rec_t rec[RU_MAXG];           /* by start */
+    rustlr_grain_t act[RU_ACTIVE];       /* by number */
+} rustlr_t;
+
+static const struct { float cutoff, soft, highpass, crease, stick, flex; } RU_MAT[6] = {
+    {4200, 0.35f, 0.65f, 0.85f, 0.5f, 720}, {950, 1, 0.2f, 0.08f, 0.15f, 180}, {1900, 0.65f, 0.32f, 0.38f, 1, 330},
+    {6400, 0.25f, 0.72f, 1.1f, 0.6f, 1150}, {12500, 0.06f, 0.92f, 1.35f, 0.3f, 2600}, {4500, 0.15f, 0.55f, 0.5f, 0.2f, 1500}};
+
+/* grain g's numbers, drawn from its place in the rng: its start, length and strength (its noise follows) */
+static void rustlr_grain(const rustlr_t *r, const float *centers, uint32_t g, syn_rng_t *rng, uint32_t *start,
+                         uint32_t *length, float *strength, float grain_frames, float fold_len)
+{
+    float position;
+    int32_t st;
+    uint32_t len;
+    if (g < r->count) {
+        if (r->kind == 5)                        /* a zip's teeth follow the pull, with small defects */
+            position = fm_powf(((float)g + 0.25f + syn_rnd(rng) * 0.5f) / (float)r->count, 1.35f - r->motion * 0.35f);
+        else {
+            float c = centers[(uint32_t)(syn_rnd(rng) * (float)(r->folds + 2u))], a = syn_rnd(rng), b = syn_rnd(rng);
+            position = fm_maxf(0.0f, fm_minf(0.96f, c + (a + b - 1.0f) * (0.035f + r->density * 0.24f)));
+        }
+        len = (uint32_t)fm_maxf(6.0f, fm_floorf(grain_frames * (0.45f + syn_rnd(rng) * 1.1f) + 0.5f));
+        st = (int32_t)fm_floorf(position * ((float)r->frames - (float)len) + 0.5f);
+        *strength = r->gain * (0.16f + syn_rnd(rng) * 0.3f) * (r->kind == 5 ? 1.4f : 1.0f);
+    } else {
+        uint32_t fold = g - r->count;
+        position = ((float)fold + 0.3f + syn_rnd(rng) * 0.45f) / (float)r->folds;
+        len = (uint32_t)fm_maxf(8.0f, fm_floorf(fold_len * (0.65f + syn_rnd(rng) * 0.65f) + 0.5f));
+        st = (int32_t)fm_floorf(position * ((float)r->frames - (float)len) + 0.5f);
+        *strength = r->gain * (0.42f + syn_rnd(rng) * 0.45f) * r->crease;
+    }
+    *start = st > 0 ? (uint32_t)st : 0u;
+    *length = len;
+}
+
+typedef struct { float centers[14], grain_frames, fold_len; } rustlr_shape_t;
+static rustlr_shape_t ru_shape;          /* (the grains' shared numbers: kept beside the state) */
+
+static COLD uint32_t rustlr_begin(void *st, const float *p)
+{
+    rustlr_t *r = st;
+    syn_rng_t rng;
+    float duration = syn_clamp(p[RUSTLR_duration], 0.08f, 3.0f), grain, brightness, cutoff, normalizer;
+    uint32_t clusters, n;
+    r->frames = syn_len(duration);
+    r->kind = (uint32_t)fm_floorf(syn_clamp(p[RUSTLR_material], 0, 5) + 0.5f);
+    r->gesture = (uint32_t)fm_floorf(syn_clamp(p[RUSTLR_gesture], 0, 3) + 0.5f);
+    grain = syn_clamp(p[RUSTLR_grain], 0, 1);
+    r->density = syn_clamp(p[RUSTLR_density], 0, 1);
+    r->motion = syn_clamp(p[RUSTLR_motion], -1, 1);
+    r->pressure = syn_clamp(p[RUSTLR_pressure], 0, 1);
+    brightness = syn_clamp(p[RUSTLR_brightness], 0, 1);
+    r->folds = (uint32_t)fm_floorf(syn_clamp(p[RUSTLR_folds], 1, 12) + 0.5f);
+    syn_rng_seed(&rng, syn_clamp(p[RUSTLR_seed], 0, 1));
+    r->soft = RU_MAT[r->kind].soft;
+    r->highpass = RU_MAT[r->kind].highpass;
+    r->crease = RU_MAT[r->kind].crease;
+    r->stick = RU_MAT[r->kind].stick;
+    r->flex_hz = RU_MAT[r->kind].flex;
+    cutoff = RU_MAT[r->kind].cutoff * (0.22f + brightness * 1.18f) / (1.0f + grain * 0.65f) * (0.8f + r->pressure * 0.4f);
+    r->filter = 1.0f - fm_expf(-TAU * cutoff / RATE);
+    r->slow_filter = 1.0f - fm_expf(-TAU * fm_maxf(60.0f, cutoff * 0.13f) / RATE);
+    r->flex_filter = 1.0f - fm_expf(-TAU * r->flex_hz * (0.7f + r->pressure * 0.8f) / RATE);
+    ru_shape.grain_frames = fm_maxf(8.0f, fm_floorf((0.0007f + grain * grain * 0.023f) * (1.0f + r->soft) * RATE + 0.5f));
+    ru_shape.fold_len = (0.003f + grain * 0.022f + r->soft * 0.016f) * RATE;
+    r->count = (uint32_t)fm_maxf(8.0f, fm_floorf(duration * (48.0f + r->density * 780.0f) / (1.0f + grain * 1.4f) + 0.5f));
+    if (r->count + r->folds > RU_MAXG)
+        r->count = RU_MAXG - r->folds;
+    clusters = r->folds + 2u;
+    for (uint32_t c = 0; c < clusters; c++)
+        ru_shape.centers[c] = ((float)c + 0.2f + syn_rnd(&rng) * 0.6f) / (float)clusters;
+    normalizer = 1.0f / fm_sqrtf(1.0f + (float)r->count * ru_shape.grain_frames / (float)r->frames * 0.12f);
+    r->gain = (0.24f + r->pressure * 0.76f) * normalizer * 2.0f;
+    r->ngr = r->count + r->folds;
+    for (uint32_t g = 0; g < r->ngr; g++) {      /* each grain's place in the rng, and when it starts */
+        uint32_t start, length;
+        float strength;
+        r->rec[g].rng = rng.s;
+        rustlr_grain(r, ru_shape.centers, g, &rng, &start, &length, &strength, ru_shape.grain_frames, ru_shape.fold_len);
+        n = start < r->frames ? (length < r->frames - start ? length : r->frames - start) : 0u;
+        rng_skip(&rng, n);
+        r->rec[g].at = start << 12 | g;
+    }
+    for (uint32_t a = 1; a < r->ngr; a++) {      /* by start (then number): an insertion sort, nearly in order */
+        rustlr_rec_t x = r->rec[a];
+        uint32_t b = a;
+        while (b > 0 && r->rec[b - 1u].at > x.at) {
+            r->rec[b] = r->rec[b - 1u];
+            b--;
+        }
+        r->rec[b] = x;
+    }
+    r->rng = rng;                                /* the bed */
+    r->breakaway = 0.7f + syn_rnd(&r->rng) * 0.6f;
+    r->slip_loss = fm_expf(-1.0f / ((0.0015f + r->soft * 0.017f) * (0.6f + r->pressure) * RATE));
+    r->friction = r->friction_slow = r->shear = r->slip = r->motion_low = 0;
+    r->next = r->nact = 0;
+    r->i = 0;
+    return r->frames;
+}
+
+static void rustlr_run(void *st, float *out, uint32_t n)
+{
+    rustlr_t *r = st;
+    uint32_t b1 = r->i + n;
+    for (uint32_t k = 0; k < n; k++)
+        out[k] = 0;
+    while (r->next < r->ngr && (r->rec[r->next].at >> 12) < b1) {   /* the grains starting in this block */
+        rustlr_rec_t *rc = &r->rec[r->next++];
+        uint32_t g = rc->at & 0xFFFu, a, start, length;
+        rustlr_grain_t *x;
+        float strength;
+        syn_rng_t rng = {rc->rng};
+        if (r->nact >= RU_ACTIVE)
+            continue;                            /* (more at once than room for: dropped) */
+        rustlr_grain(r, ru_shape.centers, g, &rng, &start, &length, &strength, ru_shape.grain_frames, ru_shape.fold_len);
+        for (a = r->nact; a > 0 && r->act[a - 1u].idx > g; a--)
+            r->act[a] = r->act[a - 1u];
+        x = &r->act[a];
+        r->nact++;
+        x->rng = rng;
+        x->idx = (uint16_t)g;
+        x->crease = g >= r->count;
+        x->start = start;
+        x->length = length;
+        x->end = start + (length < r->frames - start ? length : r->frames - start);
+        x->j = 0;
+        x->strength = strength;
+        x->low = x->slow = x->flex = x->prev = 0;
+        x->decay = 1.0f;                         /* exp(-age (5 - soft 2)), stepped */
+        x->dk = fm_expf(-(5.0f - r->soft * 2.0f) / (float)length);
+    }
+    for (uint32_t a = 0; a < r->nact; a++) {     /* the grains sounding, in their order */
+        rustlr_grain_t *x = &r->act[a];
+        float attack = x->crease ? 0.025f + r->soft * 0.22f : 0.5f, inv = 1.0f / (float)x->length;
+        float bend_k = RATE / (r->flex_hz * TAU) * (0.5f + r->soft);
+        while (x->j < x->length && x->start + x->j < b1 && x->start + x->j < x->end) {
+            uint32_t i = x->start + x->j;
+            float noise = syn_rnd(&x->rng) * 2.0f - 1.0f, age = (float)x->j * inv, window, surface, v;
+            x->low += (noise - x->low) * r->filter;
+            x->slow += (x->low - x->slow) * r->slow_filter;
+            x->flex += (x->low - x->flex) * r->flex_filter;
+            if (x->crease)                       /* a fold bends for longer; a thin film lets go at once */
+                window = fm_minf(1.0f, age / attack) * x->decay;
+            else {
+                float sn = fm_sinf(PI * age);
+                window = sn * sn;
+            }
+            surface = x->low - x->slow * r->highpass;
+            v = (surface + (x->crease ? (x->flex - x->prev) * bend_k : 0.0f)) * window * x->strength;
+            out[i - r->i] += v;
+            x->prev = x->flex;
+            x->decay *= x->dk;
+            x->j++;
+        }
+        if (x->j >= x->length || x->start + x->j >= x->end) {   /* done: out of the list */
+            for (uint32_t b = a + 1u; b < r->nact; b++)
+                r->act[b - 1u] = r->act[b];
+            r->nact--;
+            a--;
+        }
+    }
+    for (uint32_t k = 0; k < n; k++, r->i++) {   /* the friction bed, loading and slipping; the gesture's shape */
+        uint32_t i = r->i;
+        float position = (float)i / (float)(r->frames - 1u), arch = fm_maxf(0.0f, fm_sinf(PI * position)), speed, bed, env, travel;
+        r->friction += (syn_rnd(&r->rng) * 2.0f - 1.0f - r->friction) * r->filter;
+        r->friction_slow += (r->friction - r->friction_slow) * r->slow_filter;
+        r->motion_low += (syn_rnd(&r->rng) * 2.0f - 1.0f - r->motion_low) * 0.0012f;
+        speed = (0.3f + fm_powf(arch, 0.6f)) * (0.7f + fm_minf(0.8f, fm_fabsf(r->motion_low) * 12.0f));
+        r->shear += speed * (30.0f + r->density * 130.0f) / RATE / (0.6f + r->pressure * r->stick * 2.0f);
+        if (r->shear > r->breakaway) {
+            r->shear -= r->breakaway;
+            r->slip += 0.45f + r->pressure * r->stick * 1.5f;
+            r->breakaway = 0.65f + syn_rnd(&r->rng) * 0.8f;
+        }
+        r->slip *= r->slip_loss;
+        bed = (r->friction - r->friction_slow * r->highpass) * r->gain * (0.07f + r->density * 0.12f) * (0.6f + r->soft * 1.3f) *
+              speed * (0.45f + r->stick * r->slip + r->shear * 0.35f);
+        if (r->gesture == 0)
+            env = fm_powf(arch, 0.35f) * fm_expf(-position * 4.5f) * 2.0f;
+        else if (r->gesture == 1)
+            env = fm_powf(arch, 0.7f) * (0.55f + 0.45f * fm_fabsf(fm_sinf(TAU * position)));
+        else if (r->gesture == 2)
+            env = fm_powf(arch, 0.45f);
+        else
+            env = fm_powf(arch, 0.5f) * (0.2f + 0.8f * fm_fabsf(fm_sinf(PI * (float)r->folds * position)));
+        travel = fm_expf(r->motion * (position - 0.5f) * 5.0f - fm_fabsf(r->motion) * 1.4f);
+        out[k] = (out[k] + bed) * env * travel;
+    }
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -1228,9 +1935,15 @@ const syn_engine_t SYN_ENGINES[] = {
     {swarmr_begin, swarmr_run},
     {machinr_begin, machinr_run},
     {crittr_begin, crittr_run},
+    {zappr_begin, zappr_run},
+    {signlr_begin, signlr_run},
+    {pluckr_begin, pluckr_run},
+    {rustlr_begin, rustlr_run},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
                sizeof(breathr_t) <= SYN_STATE_BYTES && sizeof(birdr_t) <= SYN_STATE_BYTES &&
                sizeof(bouncr_t) <= SYN_STATE_BYTES && sizeof(swarmr_t) <= SYN_STATE_BYTES &&
-               sizeof(machinr_t) <= SYN_STATE_BYTES && sizeof(crittr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(machinr_t) <= SYN_STATE_BYTES && sizeof(crittr_t) <= SYN_STATE_BYTES &&
+               sizeof(zappr_t) <= SYN_STATE_BYTES && sizeof(signlr_t) <= SYN_STATE_BYTES &&
+               sizeof(pluckr_t) <= SYN_STATE_BYTES && sizeof(rustlr_t) <= SYN_STATE_BYTES, "synth state");
