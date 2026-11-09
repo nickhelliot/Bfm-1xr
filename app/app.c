@@ -130,6 +130,7 @@ static volatile uint32_t bx_head, bx_tail;       /* main loop writes head, the a
 static volatile int32_t bx_playing;              /* sounds playing now */
 static volatile uint32_t bx_load, bx_cuts;       /* the last block's time in %, the sounds cut for time */
 static volatile uint32_t bx_bfxr_on;             /* Bfxr voices on after the last block (their memory in use) */
+static volatile uint8_t bx_mem_bfxr = 1;         /* the shared memory holds Bfxr voices (0: a synth's render) */
 static uint32_t bx_seed = 0x2545F491u;
 static float bx_gain;
 static volatile uint32_t sp_snd = SPLASH_SND_N;  /* the start-up sound: the next sample (SPLASH_SND_N: none) */
@@ -268,6 +269,11 @@ static void voice_start(float pitch, int mono)   /* audio interrupt */
         if (bx_age[i] < bx_age[pick])
             pick = i;
     }
+    if (!bx_mem_bfxr) {                          /* (a synth's render was in the memory: no voices in it) */
+        for (i = 0; i < NVOICES; i++)
+            bx_voice[i].active = 0;
+        bx_mem_bfxr = 1;
+    }
     for (k = 0; k < BP_COUNT; k++)
         s.p[k] = set.p[k];
     bx_seed = bx_seed * 1664525u + 1013904223u;
@@ -301,7 +307,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         n = APP_BLOCK;
     for (i = 0; i < n; i++)
         bx_buf[i] = 0;
-    for (v = 0; v < NVOICES; v++) {
+    for (v = 0; v < NVOICES && bx_mem_bfxr; v++) {   /* (not while a synth's render has the memory) */
         if (!bx_voice[v].active)
             continue;
         bfxr_render(&bx_voice[v], bx_one, n);
@@ -312,7 +318,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     {
         uint32_t on = 0;
         for (v = 0; v < NVOICES; v++)
-            on += bx_voice[v].active;
+            on += bx_mem_bfxr ? (uint32_t)bx_voice[v].active : 0u;
         bx_bfxr_on = on;
     }
     for (v = 0; v < NVOICES; v++) {              /* a preset synth's sound, from the buffer */
@@ -357,7 +363,13 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     for (i = 0; i < n; i++) {
         float s;
         bx_gain += (gain - bx_gain) * 0.004f;              /* ~5 ms: turning MASTER does not click */
-        s = fm_clampf(bx_buf[i], -1.0f, 1.0f) * bx_gain;   /* (a chord can add up past full scale) */
+        s = bx_buf[i];                                     /* (sounds over each other can add up past full scale: */
+        if (s > 0.5f || s < -0.5f) {                       /*  above half, a soft knee rather than a hard clip) */
+            float m = s < 0 ? -s : s;
+            m = 0.5f + 0.5f * fm_tanhf((m - 0.5f) * 2.0f);
+            s = s < 0 ? -m : m;
+        }
+        s *= bx_gain;
         lr[2 * i] = (int32_t)s;
         lr[2 * i + 1] = (int32_t)s;
     }
@@ -759,6 +771,8 @@ static void rd_tick(uint32_t budget_us)
     float blk[256];
     if (rd.want && set.synth && bx_bfxr_on)
         return;                                  /* (a Bfxr voice still in the shared memory: the next frame) */
+    if (rd.want && set.synth)
+        bx_mem_bfxr = 0;                         /* the memory is the render's from here */
     if (rd.want) {
         uint32_t k;
         rd.want = 0;
