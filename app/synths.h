@@ -72,7 +72,11 @@ static inline float syn_rnd(syn_rng_t *r)
 }
 static inline float syn_clamp(float v, float lo, float hi) { return v != v ? lo : v < lo ? lo : v > hi ? hi : v; }
 
-#define SYN_SLOTS 24u                    /* room in the saved records for this many preset synths */
+#define SYN_SLOTS 24u
+#include "synth_ids.h"                  /* Mixr's parameters (generated) */
+#define SYN_BFXR_KINDS 7u                /* Mixr: the classic Bfxr's kinds of sound it can take (bfxr.net's generate_ buttons:
+                                            pickup .. blip, GEN_PICKUP .. GEN_BLIP) */
+uint32_t syn_mixr_kinds(uint32_t synth); /* a Mixr sound's kinds for synth (0: Bfxr): its recipes, besides 0 (any) */                    /* room in the saved records for this many preset synths */
 
 extern const uint8_t SYN_N;                      /* the preset synths built in */
 extern const syn_info_t SYN_INFO[];              /* (synth_tables.h) */

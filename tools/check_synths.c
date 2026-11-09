@@ -43,7 +43,7 @@ int main(int argc, char **argv)
         double worst = -999, worst_peak = 0, worst_mu = -999;
         int cases = 0, wc = -1, only = argc <= 2;
         for (int a = 2; a < argc; a++) only |= !strcmp(argv[a], sy->type);
-        if (!only) continue;
+        if (!only || !SYN_ENGINES[si].begin) continue;   /* (Mixr: app.c mixes two of the others) */
         for (int c = 0;; c++) {
             char path[512];
             float p[SYN_MAXP];

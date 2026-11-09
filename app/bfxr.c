@@ -457,6 +457,7 @@ void bfxr_render(bfxr_voice_t *v, float *out, uint32_t n)
 /* ------------------------------------------------------------------ the generators (main loop) --- */
 static uint32_t gen_rng = 0x5EEDu;
 void bfxr_seed(uint32_t seed) { gen_rng ^= seed * 2654435761u; }
+void bfxr_reseed(uint32_t seed) { gen_rng = seed ? seed : 0x5EEDu; }
 static float rnd(void) { return rnd_next(&gen_rng); }
 
 void bfxr_set(bfxr_sound_t *s, uint32_t k, float v)

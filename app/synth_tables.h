@@ -858,8 +858,62 @@ static const float FP_CONST[51] = {9000.0f, 700.0f, 10.0f, 17.0f, 0.5f, 70.0f, 5
 static const fp_op_t FP_OPS[121] = {{FP_ENV, 29, 0, 0, 0}, {FP_MUL, 27, 29, -1, 0}, {FP_ADD, 26, 27, -2, 0}, {FP_NOISE, 25, 0, 0, 0}, {FP_LOP, 24, 25, -3, 0}, {FP_MUL, 23, 24, -4, 0}, {FP_MUL, 19, 23, 23, 0}, {FP_ADD, 18, 19, -5, 0}, {FP_LOP, 16, 25, -6, 0}, {FP_LOP, 14, 25, -7, 0}, {FP_DIV, 13, 14, 16, 0}, {FP_NOISE, 12, 0, 0, 0}, {FP_LOP, 11, 12, -8, 0}, {FP_LOP, 9, 12, -9, 0}, {FP_DIV, 8, 9, 11, 0}, {FP_MUL, 7, 8, 13, 0}, {FP_MUL, 6, 7, 18, 0}, {FP_CLIP, 5, 6, -10, -11}, {FP_HIP, 4, 5, -12, 0}, {FP_VCF, 3, 4, 26, -5}, {FP_MUL, 2, 3, 29, 0}, {FP_MUL, 1, 2, -13, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 60, 0, 0, 0}, {FP_LOP, 59, 60, -14, 0}, {FP_MUL, 58, 59, -15, 0}, {FP_ADD, 57, 58, -16, 0}, {FP_CLIP, 56, 57, -17, -18}, {FP_LOP, 54, 60, -17, 0}, {FP_LOP, 52, 60, -12, 0}, {FP_DIV, 51, 52, 54, 0}, {FP_HIP, 50, 51, -19, 0}, {FP_MUL, 43, 50, 50, 0}, {FP_MUL, 29, 43, 43, 0}, {FP_MUL, 28, 29, -20, 0}, {FP_CLIP, 27, 28, -21, -22}, {FP_VCF, 26, 27, 56, -11}, {FP_HIP, 25, 26, -8, 0}, {FP_MUL, 24, 25, -23, 0}, {FP_ENV, 23, 0, 0, 0}, {FP_MUL, 22, 23, 24, 0}, {FP_MUL, 19, 23, 23, 0}, {FP_MUL, 15, 19, 19, 0}, {FP_MUL, 7, 15, -24, 0}, {FP_ADD, 6, 7, -25, 0}, {FP_OSC, 5, 6, 0, 0}, {FP_CLIP, 4, 5, -26, -5}, {FP_MUL, 3, 4, 15, 0}, {FP_MUL, 2, 3, -27, 0}, {FP_ADD, 1, 2, 22, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 32, 0, 0, 0}, {FP_LOP, 31, 32, -28, 0}, {FP_MUL, 30, 31, -6, 0}, {FP_ENV, 29, 0, 0, 0}, {FP_ADD, 28, 29, -23, 0}, {FP_MUL, 27, 28, 30, 0}, {FP_MUL, 26, 27, -6, 0}, {FP_ADD, 25, 26, -6, 0}, {FP_OSC, 24, 25, 0, 0}, {FP_HIP, 23, 24, -29, 0}, {FP_CLIP, 22, 23, -10, -11}, {FP_MUL, 21, 22, -30, 0}, {FP_MUL, 18, 29, 29, 0}, {FP_MUL, 14, 18, 18, 0}, {FP_MUL, 6, 14, -31, 0}, {FP_ADD, 5, 6, -32, 0}, {FP_OSC, 4, 5, 0, 0}, {FP_MUL, 3, 4, 14, 0}, {FP_MUL, 2, 3, -5, 0}, {FP_ADD, 1, 2, 21, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_ENV, 27, 0, 0, 0}, {FP_MUL, 26, 27, -33, 0}, {FP_NOISE, 25, 0, 0, 0}, {FP_LOP, 24, 25, -7, 0}, {FP_MUL, 23, 24, -34, 0}, {FP_ADD, 22, 23, 26, 0}, {FP_CLIP, 21, 22, -31, -18}, {FP_LOP, 19, 25, -17, 0}, {FP_LOP, 17, 25, -12, 0}, {FP_DIV, 16, 17, 19, 0}, {FP_HIP, 15, 16, -35, 0}, {FP_MUL, 8, 15, 15, 0}, {FP_MUL, 7, 8, -36, 0}, {FP_CLIP, 6, 7, -21, -22}, {FP_VCF, 5, 6, 21, -37}, {FP_HIP, 4, 5, -29, 0}, {FP_MUL, 3, 4, -38, 0}, {FP_MUL, 1, 27, 3, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 29, 0, 0, 0}, {FP_BP, 28, 29, -39, -6}, {FP_BP, 26, 29, -40, -41}, {FP_BP, 24, 29, -42, -41}, {FP_BP, 22, 29, -43, -44}, {FP_COPY, 200, 22, 0, 0}, {FP_ADD, 200, 200, 24, 0}, {FP_ADD, 200, 200, 26, 0}, {FP_ADD, 200, 200, 28, 0}, {FP_MUL, 21, 200, -45, 0}, {FP_ENV, 20, 0, 0, 0}, {FP_MUL, 18, 20, 20, 0}, {FP_MUL, 17, 18, -38, 0}, {FP_MUL, 16, 17, 21, 0}, {FP_MUL, 15, 16, -46, 0}, {FP_NOISE, 14, 0, 0, 0}, {FP_BP, 13, 14, -47, -41}, {FP_BP, 11, 14, -48, -41}, {FP_BP, 9, 14, -49, -41}, {FP_BP, 7, 14, -50, -41}, {FP_COPY, 201, 7, 0, 0}, {FP_ADD, 201, 201, 9, 0}, {FP_ADD, 201, 201, 11, 0}, {FP_ADD, 201, 201, 13, 0}, {FP_MUL, 6, 201, -51, 0}, {FP_SQRT, 4, 20, 0, 0}, {FP_MUL, 3, 4, 6, 0}, {FP_MUL, 2, 3, -5, 0}, {FP_ADD, 1, 2, 15, 0}, {FP_COPY, 0, 1, 0, 0}};
 static const uint16_t FP_START[6] = {0, 23, 51, 72, 91, 121};
 
+#include "synth_ids.h"
+static const syn_param_t MIXR_P[10] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"balance", "BALANCE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"synthA", "SOUND A", 7.0f, 0.0f, 21.0f, "BFXR|WHOOSHR|CHOIRR|BREATHR|BIRDR|BOUNCR|SWARMR|MACHINR|CRITTR|ZAPPR|SIGNLR|PLUCKR|RUSTLR|SQUISHR|CLONKR|BOOMR|FRACTR|RIFTR|GLITCHR|JINGLR|TRANSFXR|FOOTSTEPPR", 0, 0, 0},
+    {"kindA", "KIND A", 0.0f, 0.0f, 30.0f, 0, 1, 0, 0},
+    {"seedA", "VARIATION A", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"mutA", "MUTATIONS A", 0.0f, 0.0f, 20.0f, 0, 1, 0, 0},
+    {"synthB", "SOUND B", 4.0f, 0.0f, 21.0f, "BFXR|WHOOSHR|CHOIRR|BREATHR|BIRDR|BOUNCR|SWARMR|MACHINR|CRITTR|ZAPPR|SIGNLR|PLUCKR|RUSTLR|SQUISHR|CLONKR|BOOMR|FRACTR|RIFTR|GLITCHR|JINGLR|TRANSFXR|FOOTSTEPPR", 0, 0, 0},
+    {"kindB", "KIND B", 0.0f, 0.0f, 30.0f, 0, 1, 0, 0},
+    {"seedB", "VARIATION B", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"mutB", "MUTATIONS B", 0.0f, 0.0f, 20.0f, 0, 1, 0, 0},
+};
+static const syn_rv_t MIXR_R0[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.31f, 0.49f, 0}};
+static const syn_rv_t MIXR_R1[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 19.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 14.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.5f, 0.68f, 0}};
+static const syn_rv_t MIXR_R2[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.37f, 0.55f, 0}};
+static const syn_rv_t MIXR_R3[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 13.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.44f, 0.62f, 0}};
+static const syn_rv_t MIXR_R4[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 10.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.44f, 0.62f, 0}};
+static const syn_rv_t MIXR_R5[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 11.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 8.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.11f, 0.29f, 0}};
+static const syn_rv_t MIXR_R6[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 17.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 18.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.37f, 0.55f, 0}};
+static const syn_rv_t MIXR_R7[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 13.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.33f, 0.51f, 0}};
+static const syn_rv_t MIXR_R8[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 14.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 9.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.52f, 0.7f, 0}};
+static const syn_rv_t MIXR_R9[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 15.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}};
+static const syn_rv_t MIXR_R10[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 14.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 18.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.5f, 0.68f, 0}};
+static const syn_rv_t MIXR_R11[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 17.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.5f, 0.68f, 0}};
+static const syn_rv_t MIXR_R12[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 16.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.57f, 0.75f, 0}};
+static const syn_rv_t MIXR_R13[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 15.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 9.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.26f, 0.44f, 0}};
+static const syn_rv_t MIXR_R14[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 17.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.38f, 0.56f, 0}};
+static const syn_rv_t MIXR_R15[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 16.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 8.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.21f, 0.39f, 0}};
+static const syn_rv_t MIXR_R16[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 19.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.43f, 0.61f, 0}};
+static const syn_rv_t MIXR_R17[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 12.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 14.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.12f, 0.3f, 0}};
+static const syn_rv_t MIXR_R18[3] = {{MIXR_synthA, SYN_RV_FIXED, 0, 16.0f, 0, 0}, {MIXR_synthB, SYN_RV_FIXED, 0, 15.0f, 0, 0}, {MIXR_balance, SYN_RV_RANGE, 0, 0.37f, 0.55f, 0}};
+static const syn_recipe_t MIXR_RECIPES[19] = {
+    {"CLOCKWORK AVIARY", MIXR_R0, 3},
+    {"TREASURE BOX", MIXR_R1, 3},
+    {"CYBER BIRD", MIXR_R2, 3},
+    {"WETWARE", MIXR_R3, 3},
+    {"ALIEN BROADCAST", MIXR_R4, 3},
+    {"GARDEN LUTE", MIXR_R5, 3},
+    {"REALITY ERROR", MIXR_R6, 3},
+    {"GOO COLLISION", MIXR_R7, 3},
+    {"LIVE WIRE", MIXR_R8, 3},
+    {"SHOCKWAVES", MIXR_R9, 3},
+    {"BRAIN ZAPS", MIXR_R10, 3},
+    {"OTHERWORLD", MIXR_R11, 3},
+    {"SHATTERSTORM", MIXR_R12, 3},
+    {"THUNDERWORKS", MIXR_R13, 3},
+    {"PHASE SHIFT", MIXR_R14, 3},
+    {"MONSTER HATCHERY", MIXR_R15, 3},
+    {"ARCANE REWARD", MIXR_R16, 3},
+    {"POCKET RATTLE", MIXR_R17, 3},
+    {"DEMOLITION", MIXR_R18, 3},
+};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 21u
+#define SYN_NPRESET 22u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES, 0},
@@ -883,4 +937,5 @@ const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"JINGLR", "Jinglr", 15, JINGLR_P, 12, JINGLR_RECIPES, 0},
     {"TRANSFXR", "Transfxr", 23, TRANSFXR_P, 16, TRANSFXR_RECIPES, 3},
     {"FOOTSTEPPR", "Footsteppr", 6, FOOTSTEPPR_P, 0, FOOTSTEPPR_RECIPES, 0},
+    {"MIXR", "Mixr", 10, MIXR_P, 19, MIXR_RECIPES, 1},
 };

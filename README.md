@@ -116,6 +116,7 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **GLITCHR** | Digital damage: buffer underruns, codec warble, tape scrub, bit rot, data squeal, stutter |
 | **JINGLR** | Little tunes for discoveries, victories and warnings, on pluck, bell, chip, flute, keys, reed, FM or strings |
 | **TRANSFXR** | A voice travelling between two states: each of PITCH, FILTER, WOBBLE, LEVEL and MORPH has a START, an END and a CURVE between them |
+| **MIXR** | Two of the other synths' sounds together: SOUND, KIND (one of its buttons, or ANY), VARIATION and MUTATIONS for each, and the BALANCE between them. bfxr.net's Mixr sounds can't be sent to the FM-1 (each keeps all its sounds' settings) |
 | **FOOTSTEPPR** | Footsteps on snow, grass, dirt, gravel or wood: HEEL, ROLL and BALL shape the step, SWIFTNESS its pace |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:

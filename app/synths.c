@@ -66,12 +66,29 @@ static int is_key(const char *a, const char *b)
 }
 static int locked(const syn_info_t *sy, uint32_t k) { return is_key(sy->p[k].key, "masterVolume"); }
 
+static int is_mixr(const syn_info_t *sy) { return is_key(sy->type, "Mixr"); }
+
+COLD uint32_t syn_mixr_kinds(uint32_t synth)
+{
+    return synth == 0 ? SYN_BFXR_KINDS : synth <= SYN_N ? SYN_INFO[synth - 1u].nr : 0u;
+}
+
 COLD void syn_set(const syn_info_t *sy, float *p, uint32_t k, float v)
 {
     const syn_param_t *d = &sy->p[k];
     v = syn_clamp(v, d->min, d->max);
     if (d->round || d->choices)
         v = fm_floorf(v + 0.5f);                 /* Math.round */
+    if (is_mixr(sy)) {                           /* (a kind: one of that synth's recipes, 0 any) */
+        if (k == MIXR_kindA || k == MIXR_kindB)
+            v = fm_minf(v, (float)syn_mixr_kinds((uint32_t)p[k == MIXR_kindA ? MIXR_synthA : MIXR_synthB]));
+        p[k] = v;
+        if (k == MIXR_synthA || k == MIXR_synthB) {
+            uint32_t kk = k == MIXR_synthA ? MIXR_kindA : MIXR_kindB;
+            p[kk] = fm_minf(p[kk], (float)syn_mixr_kinds((uint32_t)v));
+        }
+        return;
+    }
     if (is_key(sy->type, "Jinglr") && is_key(d->key, "seed"))
         v = fm_floorf(v * 99999.0f + 0.5f) / 99999.0f;   /* (a melody's code, 0 .. 99999) */
     p[k] = v;
@@ -115,8 +132,8 @@ COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
         if (!locked(sy, v->param))
             syn_set(sy, p, v->param, x);
     }
-    for (uint32_t k = 0; k < sy->np; k++)        /* a new variation */
-        if (is_key(sy->p[k].key, "seed"))
+    for (uint32_t k = 0; k < sy->np; k++)        /* a new variation (Mixr: each sound's) */
+        if (is_key(sy->p[k].key, "seed") || (is_mixr(sy) && (k == MIXR_seedA || k == MIXR_seedB)))
             syn_set(sy, p, k, syn_rnd(rng));
     if (is_key(sy->type, "Jinglr"))              /* after_recipe: a new character for the instrument */
         jinglr_new_voice(sy, p, rng);
@@ -162,6 +179,12 @@ COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
 
 COLD void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
+    if (is_mixr(sy)) {                           /* bfxr2's: the balance nudged, each sound mutated (once more) */
+        syn_set(sy, p, MIXR_balance, p[MIXR_balance] + (syn_rnd(rng) - 0.5f) * 0.15f);
+        syn_set(sy, p, MIXR_mutA, p[MIXR_mutA] + 1.0f);
+        syn_set(sy, p, MIXR_mutB, p[MIXR_mutB] + 1.0f);
+        return;
+    }
     if (is_key(sy->type, "Jinglr")) {            /* a mutation gets a new melody code nearby */
         int k = syn_find(sy, "seed");
         if (k >= 0) {
@@ -4105,6 +4128,7 @@ const syn_engine_t SYN_ENGINES[] = {
     {jinglr_begin, jinglr_run, jinglr_whole},
     {transfxr_begin, transfxr_run, transfxr_whole},
     {footsteppr_begin, footsteppr_run, footsteppr_whole},
+    {0, 0, 0},                           /* Mixr: two of the others, mixed (app.c) */
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&

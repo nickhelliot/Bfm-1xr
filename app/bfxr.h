@@ -34,6 +34,7 @@ void bfxr_generate(bfxr_sound_t *s, uint32_t gen);   /* GEN_*: a new sound of th
 void bfxr_mutate(bfxr_sound_t *s);
 void bfxr_set(bfxr_sound_t *s, uint32_t k, float v); /* clamped to the parameter's range (the wave: rounded) */
 void bfxr_seed(uint32_t seed);                       /* the generators' random numbers */
+void bfxr_reseed(uint32_t seed);                     /* ... from a known start (Mixr: the same sound again) */
 
 /* a float-float number (hi + lo, ~48 bits): the FM-1's compiler has no double, and the sums made every sample (the
  * period and its slide, the vibrato's phase) drift audibly in a plain float */

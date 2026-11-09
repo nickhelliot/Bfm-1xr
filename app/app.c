@@ -152,7 +152,7 @@ static volatile float sb_vol;
 typedef struct { uint8_t active; uint32_t i; float frac, step; } sb_voice_t;
 static sb_voice_t sb_voice[NVOICES];
 
-enum { RD_IDLE, RD_MEAN, RD_OUT, RD_FINISH, RD_REVERSE, RD_ECHO, RD_SUM };
+enum { RD_IDLE, RD_MEAN, RD_OUT, RD_FINISH, RD_REVERSE, RD_ECHO, RD_SUM, RD_PEAK, RD_MIX };
 /* A synth that works on its whole sound (syn_whole_t) is kept raw in the buffer while it is made (16 bits, or for a
  * long one µ-law bytes of a range of -8 .. 8), then reversed or echoed there, then its mean taken, then finished. */
 #define RD_KEEP_SCALE 8.0f                       /* a sound kept as 16 bits: -8 .. 8 (past that tanh is 1 anyway) */
@@ -167,6 +167,16 @@ static struct {
     uint32_t len, pos;
     float sum, comp, mean;               /* the mean, summed with Kahan's correction */
     float p[SYN_MAXP];
+    const syn_engine_t *eng;             /* the sound being made, and its parameters (rd.p, or a Mixr sound's) */
+    const float *cp;
+    uint32_t base;                       /* where a sound kept as bytes starts in the buffer (Mixr's second: the end) */
+    /* Mixr: its two sounds (parameters to the classic Bfxr's 32), the one made first (the other is mixed into it),
+     * the mix's length, the first's format (16 bits) and level as it is mixed, the second's length */
+    uint8_t mix, phase, first, akeep;
+    const syn_engine_t *seng[2];
+    float sp[2][BP_COUNT];
+    uint32_t L, lsec;
+    float again;
     struct { int32_t st; uint8_t mono; } pend[4];   /* asked to play while it renders */
     uint8_t npend;
 } rd;
@@ -545,11 +555,17 @@ static float rd_fade(uint32_t j)                 /* SoundDSP.finish's fades: 220
     return fm_minf(1.0f, fm_minf((float)j * inv, (float)(rd.len - 1u - j) * inv));
 }
 
+static float rd_shape(float v, uint32_t j)       /* a raw sample, finished: the mean out, then tanh and fades */
+{
+    v = v - v == 0.0f ? v - rd.mean : 0.0f;      /* (not finite: 0, as bfxr2) */
+    return rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
+}
+
 static float rd_raw(uint32_t j)                  /* the kept sound's sample j, before finishing */
 {
     if (rd.keep)
         return (float)((const int16_t *)(const void *)sb_mem)[j] * (RD_KEEP_SCALE / 32767.0f);
-    return sb_dec[sb_mem[j]] * RD_KEEP_SCALE;
+    return sb_dec[sb_mem[rd.base + j]] * RD_KEEP_SCALE;
 }
 static void rd_put_raw(uint32_t j, float v)
 {
@@ -557,24 +573,183 @@ static void rd_put_raw(uint32_t j, float v)
     if (rd.keep)
         ((int16_t *)(void *)sb_mem)[j] = (int16_t)(v * (32767.0f / RD_KEEP_SCALE));
     else
-        sb_mem[j] = mulaw(v * (1.0f / RD_KEEP_SCALE));
+        sb_mem[rd.base + j] = mulaw(v * (1.0f / RD_KEEP_SCALE));
 }
 
-static void rd_done(void)                        /* the sound is ready: it plays, and what waited for it */
+static float rd_level(void)                      /* the finished sound's level as it plays: its volume (the first) */
+{
+    float v;
+    if (rd.w.raw)                                /* (Footsteppr, a Bfxr sound: its volume in it already) */
+        return 1.0f;
+    v = fm_clampf(rd.cp[0], 0.0f, 1.0f) * 0.95f;
+    if (rd.w.normalize && rd.peak * 0.95f > 0.00001f)  /* (Riftr: a quiet field brought up, at most 4 times) */
+        v *= fm_minf(4.0f, fm_maxf(1.0f, 0.9f / (0.95f * rd.peak)));
+    return v;
+}
+
+/* Mixr: its two sounds, from their synth, kind, variation and mutations. The classic Bfxr's is played by its voice in
+ * the synths' memory, as a sound of its own (raw: its volume in it). */
+static uint32_t bsrc_begin(void *st, const float *p)
+{
+    bfxr_voice_t *v = st;
+    bfxr_start(v, (const bfxr_sound_t *)(const void *)p, 1.0f, 0x2545F491u);
+    return (uint32_t)v->full_len;
+}
+static void bsrc_run(void *st, float *out, uint32_t n) { bfxr_render((bfxr_voice_t *)st, out, n); }
+static void bsrc_whole(const float *p, uint32_t len, syn_whole_t *w)
+{
+    (void)p;
+    (void)len;
+    w->raw = 1;
+}
+static const syn_engine_t BSRC = {bsrc_begin, bsrc_run, bsrc_whole};
+
+static const syn_engine_t *mixr_source(const float *mp, uint32_t x, float *p)   /* x: 0 (A) or 1 (B) */
+{
+    uint32_t base = x ? MIXR_X_B : MIXR_X_A, synth = (uint32_t)mp[base], kind = (uint32_t)mp[base + 1u];
+    uint32_t muts = (uint32_t)mp[base + 3u], nk = syn_mixr_kinds(synth), m;
+    syn_rng_t r;
+    syn_rng_seed(&r, syn_clamp(mp[base + 2u], 0, 1));
+    if (kind == 0 || kind > nk)                  /* any: one of its recipes, as the variation picks */
+        kind = nk ? 1u + (uint32_t)(syn_rnd(&r) * (float)nk) % nk : 0u;
+    if (synth == 0 || synth > SYN_N || synth == MIXR_ID) {   /* the classic Bfxr */
+        bfxr_sound_t s;
+        bfxr_reseed(r.s * 2654435761u + 1u);
+        bfxr_generate(&s, kind ? kind - 1u : GEN_PICKUP);
+        for (m = 0; m < muts; m++)
+            bfxr_mutate(&s);
+        for (m = 0; m < BP_COUNT; m++)
+            p[m] = s.p[m];
+        return &BSRC;
+    }
+    {
+        const syn_info_t *sy = &SYN_INFO[synth - 1u];
+        syn_defaults(sy, p);
+        if (kind)
+            syn_recipe(sy, p, kind - 1u, &r);
+        else
+            syn_randomize(sy, p, &r);            /* (Footsteppr: no recipes, its sliders at random) */
+        for (m = 0; m < muts; m++)
+            syn_mutate(sy, p, &r);
+        return &SYN_ENGINES[synth - 1u];
+    }
+}
+
+static void rd_start(const syn_engine_t *e, const float *p, uint32_t cap, int keep, uint32_t base)
+{                                                /* one sound into the buffer: made, then finished */
+    syn_whole_t z = {0};
+    rd.eng = e;
+    rd.cp = p;
+    rd.len = rd.full = e->begin(vm.mem, p);
+    if (rd.len > cap)
+        rd.len = cap;                            /* (longer than the buffer: cut, and faded at the cut) */
+    rd.pos = 0;
+    rd.sum = rd.comp = 0;
+    rd.peak = 0;
+    rd.keep = keep < 0 ? rd.len * 2u <= SB_BYTES : (uint8_t)keep;
+    rd.base = base;
+    rd.w = z;
+    if (e->whole)
+        e->whole(p, rd.len, &rd.w);
+    rd.whole = rd.w.reverse > 0 || rd.w.necho > 0;
+    rd.state = RD_MEAN;
+    rd.mean = 0;
+    if ((rd.w.plain || rd.w.raw) && !rd.keep && !rd.whole)
+        rd.state = rd.mix && rd.phase ? (rd.w.normalize ? RD_PEAK : RD_MIX) : RD_OUT;   /* (no mean to take) */
+}
+
+static void rd_mixr(void)                        /* Mixr: its first sound into the buffer, then the second mixed in */
+{
+    uint32_t lf, ls, k;
+    int wf, ws;
+    syn_whole_t w;
+    for (k = 0; k < 2u; k++)
+        rd.seng[k] = mixr_source(rd.p, k, rd.sp[k]);
+    lf = rd.seng[0]->begin(vm.mem, rd.sp[0]);
+    memset(&w, 0, sizeof w);
+    if (rd.seng[0]->whole)
+        rd.seng[0]->whole(rd.sp[0], lf, &w);
+    wf = w.reverse > 0 || w.necho > 0;
+    ls = rd.seng[1]->begin(vm.mem, rd.sp[1]);
+    memset(&w, 0, sizeof w);
+    if (rd.seng[1]->whole)
+        rd.seng[1]->whole(rd.sp[1], ls, &w);
+    ws = w.reverse > 0 || w.necho > 0;
+    rd.first = (uint8_t)(ws && !wf);             /* one worked on whole (Riftr reversed, Jinglr's echo): it goes first */
+    if (rd.first) {
+        uint32_t t = lf;
+        lf = ls, ls = t;
+        wf = 1, ws = 0;
+    }
+    rd.L = lf > ls ? lf : ls;                    /* bfxr2: the longer one's length, 0.1 s at least */
+    if (rd.L < 4410u)
+        rd.L = 4410u;
+    if (rd.L > SB_LEN)
+        rd.L = SB_LEN;
+    if (ws) {                                    /* both: the second kept raw at the buffer's end, both as bytes */
+        if (ls > SB_LEN / 2u)
+            ls = SB_LEN / 2u;
+        if (rd.L > SB_BYTES - ls)
+            rd.L = SB_BYTES - ls;
+        rd.akeep = 0;
+    } else
+        rd.akeep = rd.L * 2u <= SB_BYTES;
+    rd.lsec = ls < rd.L ? ls : rd.L;
+    rd.phase = 0;
+    rd_start(rd.seng[rd.first], rd.sp[rd.first], lf < rd.L ? lf : rd.L, rd.akeep, 0);
+}
+
+static float rd_slot_gain(uint32_t x)            /* Mixr: a sound's share, balance and volume (bfxr2: volume * 2) */
+{
+    float bal = fm_clampf(rd.p[MIXR_balance], 0.0f, 1.0f), vol = fm_clampf(rd.p[MIXR_masterVolume], 0.0f, 1.0f);
+    return (x ? bal : 1.0f - bal) * vol * 2.0f;
+}
+
+static float rd_mixed(uint32_t j)                /* Mixr: the first sound as kept (finished), at its level */
+{
+    float a = rd.akeep ? (float)((const int16_t *)(const void *)sb_mem)[j] * (1.0f / 32767.0f) : sb_dec[sb_mem[j]];
+    return a * rd.again;
+}
+static void rd_put_mixed(uint32_t j, float v)    /* ... and the mix in its place: clipped, the last 128 faded */
+{
+    v = fm_clampf(v, -1.0f, 1.0f);
+    if (j + 128u > rd.L)
+        v *= (float)(rd.L - 1u - j) * (1.0f / 127.0f);
+    if (rd.akeep)
+        ((int16_t *)(void *)sb_mem)[j] = (int16_t)(v * 32767.0f);
+    else
+        sb_mem[j] = mulaw(v);
+}
+
+static void rd_ready(uint32_t len, int wide, float vol)
 {
     uint32_t i;
-    sb_len = rd.len;
-    sb_wide = rd.keep;
-    sb_vol = fm_clampf(rd.p[0], 0.0f, 1.0f) * 0.95f;   /* the volume, masterVolume, is the first */
-    if (rd.w.raw)                                /* (Footsteppr: its volume in the sound already) */
-        sb_vol = 1.0f;
-    if (rd.w.normalize && rd.peak * 0.95f > 0.00001f)  /* (Riftr: a quiet field brought up, at most 4 times) */
-        sb_vol *= fm_minf(4.0f, fm_maxf(1.0f, 0.9f / (0.95f * rd.peak)));
+    sb_len = len;
+    sb_wide = (uint8_t)wide;
+    sb_vol = vol;
     rd.state = RD_IDLE;
     sb_ready = 1;
     for (i = 0; i < rd.npend; i++)
         ring_push(rd.pend[i].st, rd.pend[i].mono);
     rd.npend = 0;
+}
+
+static void rd_done(void)                        /* the sound is finished: it plays, and what waited for it */
+{
+    uint32_t i;
+    if (!rd.mix) {
+        rd_ready(rd.len, rd.keep, rd_level());
+        return;
+    }
+    /* Mixr's first sound: the rest of the mix's length silent, then the second */
+    rd.again = rd_level() * rd_slot_gain(rd.first);
+    for (i = rd.len; i < rd.L; i++)
+        if (rd.akeep)
+            ((int16_t *)(void *)sb_mem)[i] = 0;
+        else
+            sb_mem[i] = mulaw(0.0f);
+    rd.phase = 1;
+    rd_start(rd.seng[!rd.first], rd.sp[!rd.first], rd.lsec, 0, SB_BYTES - rd.lsec);
 }
 
 /* main loop: render the preset synth's sound for up to budget_us */
@@ -596,27 +771,14 @@ static void rd_tick(uint32_t budget_us)
         rd.synth = set.synth;
         for (k = 0; k < SYN_MAXP; k++)
             rd.p[k] = set.sp[set.synth - 1u][k];
-        rd.len = rd.full = SYN_ENGINES[rd.synth - 1u].begin(vm.mem, rd.p);
-        if (rd.len > SB_LEN)
-            rd.len = SB_LEN;                     /* (longer than the buffer: cut, and faded at the cut) */
-        rd.pos = 0;
-        rd.sum = rd.comp = 0;
-        rd.peak = 0;
-        rd.keep = rd.len * 2u <= SB_BYTES;
-        {
-            syn_whole_t z = {0};
-            rd.w = z;
-        }
-        if (SYN_ENGINES[rd.synth - 1u].whole)
-            SYN_ENGINES[rd.synth - 1u].whole(rd.p, rd.len, &rd.w);
-        rd.whole = rd.w.reverse > 0 || rd.w.necho > 0;
-        rd.state = RD_MEAN;
-        rd.mean = 0;
-        if ((rd.w.plain || rd.w.raw) && !rd.keep && !rd.whole)
-            rd.state = RD_OUT;                   /* (no mean to take: made once, straight to bytes) */
+        rd.mix = rd.synth == MIXR_ID;
+        if (rd.mix)
+            rd_mixr();
+        else
+            rd_start(&SYN_ENGINES[rd.synth - 1u], rd.p, SB_LEN, -1, 0);
     }
     while (rd.state != RD_IDLE && plat_ticks24() - t0 < budget_us * PLAT_TICKS_PER_US) {
-        const syn_engine_t *e = &SYN_ENGINES[rd.synth - 1u];
+        const syn_engine_t *e = rd.eng;
         uint32_t n = rd.len - rd.pos;
         if (n > 256u)
             n = 256u;
@@ -625,7 +787,7 @@ static void rd_tick(uint32_t budget_us)
             int16_t *w16 = (int16_t *)(void *)sb_mem;
             for (i = 0; i < m; i++) {
                 uint32_t j = rd.pos + i;
-                float v = rd_raw(j) - rd.mean, x = rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
+                float x = rd_shape(rd_raw(j), j);
                 rd.peak = fm_maxf(rd.peak, fm_fabsf(x));
                 if (rd.keep)
                     w16[j] = (int16_t)(x * 32767.0f);
@@ -679,8 +841,38 @@ static void rd_tick(uint32_t budget_us)
             if (rd.pos >= rd.len) {
                 rd.mean = rd.len && !rd.w.plain && !rd.w.raw ? rd.sum / (float)rd.len : 0.0f;
                 rd.pos = 0;
-                rd.state = RD_FINISH;
+                rd.state = rd.mix && rd.phase ? (rd.w.normalize ? RD_PEAK : RD_MIX) : RD_FINISH;
             }
+            continue;
+        }
+        if ((rd.state == RD_PEAK || rd.state == RD_MIX) && rd.whole) {   /* Mixr's second sound, kept: read back */
+            uint32_t m = rd.L - rd.pos > 4096u ? 4096u : rd.L - rd.pos;
+            float g = rd.state == RD_MIX ? rd_level() * rd_slot_gain(!rd.first) : 0.0f;
+            for (i = 0; i < m; i++) {
+                uint32_t j = rd.pos + i;
+                float x = j < rd.len ? rd_shape(rd_raw(j), j) : 0.0f;
+                if (rd.state == RD_PEAK)
+                    rd.peak = fm_maxf(rd.peak, fm_fabsf(x));
+                else
+                    rd_put_mixed(j, rd_mixed(j) + x * g);
+            }
+            rd.pos += m;
+            if (rd.pos >= (rd.state == RD_PEAK ? rd.len : rd.L)) {
+                rd.pos = 0;
+                if (rd.state == RD_PEAK)
+                    rd.state = RD_MIX;
+                else
+                    rd_ready(rd.L, rd.akeep, 1.0f);
+            }
+            continue;
+        }
+        if (rd.state == RD_MIX && rd.pos >= rd.len) {   /* Mixr: past the second sound, the first alone */
+            uint32_t m = rd.L - rd.pos > 4096u ? 4096u : rd.L - rd.pos;
+            for (i = 0; i < m; i++)
+                rd_put_mixed(rd.pos + i, rd_mixed(rd.pos + i));
+            rd.pos += m;
+            if (rd.pos >= rd.L)
+                rd_ready(rd.L, rd.akeep, 1.0f);
             continue;
         }
         if (n)
@@ -698,24 +890,43 @@ static void rd_tick(uint32_t budget_us)
                     ((int16_t *)(void *)sb_mem)[rd.pos + i] =
                         (int16_t)(fm_clampf(v, -RD_KEEP_SCALE, RD_KEEP_SCALE) * (32767.0f / RD_KEEP_SCALE));
                 else if (rd.whole)
-                    sb_mem[rd.pos + i] = mulaw(v * (1.0f / RD_KEEP_SCALE));
+                    sb_mem[rd.base + rd.pos + i] = mulaw(v * (1.0f / RD_KEEP_SCALE));
             }
             rd.pos += n;
             if (rd.pos >= rd.len) {
                 rd.mean = rd.len && !rd.w.plain && !rd.w.raw ? rd.sum / (float)rd.len : 0.0f;
                 if (!rd.keep && !rd.whole)
-                    (void)e->begin(vm.mem, rd.p);    /* again from the start, for the samples */
+                    (void)e->begin(vm.mem, rd.cp);   /* again from the start, for the samples */
                 rd.pos = 0;
-                rd.state = rd.whole ? (rd.w.reverse > 0 ? RD_REVERSE : RD_ECHO) : rd.keep ? RD_FINISH : RD_OUT;
+                if (rd.whole)
+                    rd.state = rd.w.reverse > 0 ? RD_REVERSE : RD_ECHO;
+                else if (rd.mix && rd.phase)
+                    rd.state = rd.w.normalize ? RD_PEAK : RD_MIX;
+                else
+                    rd.state = rd.keep ? RD_FINISH : RD_OUT;
                 if (rd.state == RD_ECHO)
                     rd.pos = rd.len;             /* (the echoes go from the end back) */
             }
+        } else if (rd.state == RD_PEAK) {        /* Mixr's second sound, normalized: its peak first, then again */
+            for (i = 0; i < n; i++)
+                rd.peak = fm_maxf(rd.peak, fm_fabsf(rd_shape(blk[i], rd.pos + i)));
+            rd.pos += n;
+            if (rd.pos >= rd.len) {
+                (void)e->begin(vm.mem, rd.cp);
+                rd.pos = 0;
+                rd.state = RD_MIX;
+            }
+        } else if (rd.state == RD_MIX) {         /* ... mixed into the first as it is made */
+            float g = rd_level() * rd_slot_gain(!rd.first);
+            for (i = 0; i < n; i++) {
+                uint32_t j = rd.pos + i;
+                rd_put_mixed(j, rd_mixed(j) + rd_shape(blk[i], j) * g);
+            }
+            rd.pos += n;
         } else {
             for (i = 0; i < n; i++) {
                 uint32_t j = rd.pos + i;
-                float v = blk[i];
-                v = v - v == 0.0f ? v - rd.mean : 0.0f;
-                v = rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
+                float v = rd_shape(blk[i], j);
                 rd.peak = fm_maxf(rd.peak, fm_fabsf(v));
                 sb_mem[j] = mulaw(v);
             }
@@ -824,6 +1035,13 @@ static void value_text(uint32_t k, char *t)
         t[0] = 0;
         if (d->choices && syn_choices(d, v, t, 24))
             return;
+        if (set.synth == MIXR_ID && (k == MIXR_kindA || k == MIXR_kindB)) {   /* Mixr: a kind by its name */
+            uint32_t sy = (uint32_t)cur_p()[k - 1u], kd = (uint32_t)v;
+            const char *nm = kd == 0 ? "ANY" : sy == 0 ? BFXR_GEN_NAMES[(kd - 1u) % GEN_COUNT] :
+                             sy <= SYN_N && kd <= SYN_INFO[sy - 1u].nr ? SYN_INFO[sy - 1u].r[kd - 1u].name : "ANY";
+            text_cat(t, nm);
+            return;
+        }
         if (d->round || d->choices || d->max - d->min > 20.0f)
             int_text((int32_t)fm_floorf(v + 0.5f), t);
         else if (fm_fabsf(v) >= 9.995f) {        /* 12.0 */
@@ -1530,8 +1748,10 @@ static void input(void)
         } else if (k == EN_PRESET) {
             int32_t g = ((int32_t)set.gen + e) % GEN_COUNT;
             generate((uint32_t)(g < 0 ? g + GEN_COUNT : g));
-        } else if (k == EN_ALGO && set.synth) {  /* a preset synth: VARIATION */
-            int v = syn_find(cur_syn(), "seed");
+        } else if (k == EN_ALGO && set.synth) {  /* a preset synth: VARIATION (Mixr: both its sounds') */
+            int v = set.synth == MIXR_ID ? MIXR_seedA : syn_find(cur_syn(), "seed");
+            if (set.synth == MIXR_ID)
+                syn_set(cur_syn(), cur_p(), MIXR_seedB, cur_p()[MIXR_seedB] + (float)e * 0.01f);
             if (v >= 0)
                 edit_param((uint32_t)v, e);
         } else if (k == EN_ALGO) {
