@@ -37,13 +37,23 @@ typedef struct {
     uint8_t randomize;                   /* 0 every slider at random; 1 a random recipe; 2 that, the length capped (Crittr) */
 } syn_info_t;
 
+/* what a synth does to its whole sound after making it (bfxr2 works on its buffer), before SoundDSP.finish; and after */
+typedef struct {
+    float reverse;                       /* Riftr: the sound mixed with itself backwards */
+    uint8_t necho;                       /* Jinglr: repeats of the sound, echo_off samples later, echo_gain loud */
+    uint32_t echo_off[3];
+    float echo_gain[3];
+    uint8_t normalize;                   /* Riftr: after finishing, up to 4 times louder, to a peak of 0.9 */
+} syn_whole_t;
+
 typedef struct {
     uint32_t (*begin)(void *st, const float *p);
     void (*run)(void *st, float *out, uint32_t n);
+    void (*whole)(const float *p, uint32_t len, syn_whole_t *w);   /* (most have none: 0) */
 } syn_engine_t;
 
 #define SYN_MAXP 16u                     /* the most parameters a preset synth has */
-#define SYN_STATE_BYTES 32768u           /* the largest synth state (shared with the Bfxr voices: app.c) */
+#define SYN_STATE_BYTES 65536u           /* the largest synth state (shared with the Bfxr voices: app.c) */
 
 /* bfxr2's seeded random numbers (SoundDSP.rng, mulberry32) */
 typedef struct { uint32_t s; } syn_rng_t;

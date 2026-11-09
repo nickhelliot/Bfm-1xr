@@ -151,12 +151,17 @@ static volatile float sb_vol;
 typedef struct { uint8_t active; uint32_t i; float frac, step; } sb_voice_t;
 static sb_voice_t sb_voice[NVOICES];
 
-enum { RD_IDLE, RD_MEAN, RD_OUT, RD_FINISH };
+enum { RD_IDLE, RD_MEAN, RD_OUT, RD_FINISH, RD_REVERSE, RD_ECHO, RD_SUM };
+/* A synth that works on its whole sound (syn_whole_t) is kept raw in the buffer while it is made (16 bits, or for a
+ * long one µ-law bytes of a range of -8 .. 8), then reversed or echoed there, then its mean taken, then finished. */
 #define RD_KEEP_SCALE 8.0f                       /* a sound kept as 16 bits: -8 .. 8 (past that tanh is 1 anyway) */
 static struct {
     uint8_t want;                        /* the sound changed: render it again */
     uint8_t state;                       /* RD_* */
     uint8_t synth, keep;                 /* keep: the sound kept as 16 bits (short enough) */
+    uint8_t whole;                       /* worked on whole (syn_whole_t): kept raw, 16 bits or bytes */
+    syn_whole_t w;
+    float peak;                          /* the finished sound's, for w.normalize */
     uint32_t len, pos;
     float sum, comp, mean;               /* the mean, summed with Kahan's correction */
     float p[SYN_MAXP];
@@ -524,12 +529,29 @@ static float rd_fade(uint32_t j)                 /* SoundDSP.finish's fades: 220
     return fm_minf(1.0f, fm_minf((float)j * inv, (float)(rd.len - 1u - j) * inv));
 }
 
+static float rd_raw(uint32_t j)                  /* the kept sound's sample j, before finishing */
+{
+    if (rd.keep)
+        return (float)((const int16_t *)(const void *)sb_mem)[j] * (RD_KEEP_SCALE / 32767.0f);
+    return sb_dec[sb_mem[j]] * RD_KEEP_SCALE;
+}
+static void rd_put_raw(uint32_t j, float v)
+{
+    v = fm_clampf(v, -RD_KEEP_SCALE, RD_KEEP_SCALE);
+    if (rd.keep)
+        ((int16_t *)(void *)sb_mem)[j] = (int16_t)(v * (32767.0f / RD_KEEP_SCALE));
+    else
+        sb_mem[j] = mulaw(v * (1.0f / RD_KEEP_SCALE));
+}
+
 static void rd_done(void)                        /* the sound is ready: it plays, and what waited for it */
 {
     uint32_t i;
     sb_len = rd.len;
     sb_wide = rd.keep;
     sb_vol = fm_clampf(rd.p[0], 0.0f, 1.0f) * 0.95f;   /* the volume, masterVolume, is the first */
+    if (rd.w.normalize && rd.peak * 0.95f > 0.00001f)  /* (Riftr: a quiet field brought up, at most 4 times) */
+        sb_vol *= fm_minf(4.0f, fm_maxf(1.0f, 0.9f / (0.95f * rd.peak)));
     rd.state = RD_IDLE;
     sb_ready = 1;
     for (i = 0; i < rd.npend; i++)
@@ -561,7 +583,15 @@ static void rd_tick(uint32_t budget_us)
             rd.len = SB_LEN;                     /* (longer than the buffer: cut, and faded at the cut) */
         rd.pos = 0;
         rd.sum = rd.comp = 0;
+        rd.peak = 0;
         rd.keep = rd.len * 2u <= SB_BYTES;
+        {
+            syn_whole_t z = {0};
+            rd.w = z;
+        }
+        if (SYN_ENGINES[rd.synth - 1u].whole)
+            SYN_ENGINES[rd.synth - 1u].whole(rd.p, rd.len, &rd.w);
+        rd.whole = rd.w.reverse > 0 || rd.w.necho > 0;
         rd.state = RD_MEAN;
     }
     while (rd.state != RD_IDLE && plat_ticks24() - t0 < budget_us * PLAT_TICKS_PER_US) {
@@ -569,17 +599,67 @@ static void rd_tick(uint32_t budget_us)
         uint32_t n = rd.len - rd.pos;
         if (n > 256u)
             n = 256u;
-        if (rd.state == RD_FINISH) {             /* the kept sound finished in place, 16 bits a sample */
+        if (rd.state == RD_FINISH) {             /* the kept sound finished in place: 16 bits, or bytes */
             uint32_t m = rd.len - rd.pos > 4096u ? 4096u : rd.len - rd.pos;
             int16_t *w16 = (int16_t *)(void *)sb_mem;
             for (i = 0; i < m; i++) {
                 uint32_t j = rd.pos + i;
-                float v = (float)w16[j] * (RD_KEEP_SCALE / 32767.0f) - rd.mean;
-                w16[j] = (int16_t)(fm_tanhf(v) * rd_fade(j) * 32767.0f);
+                float v = rd_raw(j) - rd.mean, x = fm_tanhf(v) * rd_fade(j);
+                rd.peak = fm_maxf(rd.peak, fm_fabsf(x));
+                if (rd.keep)
+                    w16[j] = (int16_t)(x * 32767.0f);
+                else
+                    sb_mem[j] = mulaw(x);
             }
             rd.pos += m;
             if (rd.pos >= rd.len)
                 rd_done();
+            continue;
+        }
+        if (rd.state == RD_REVERSE) {            /* the sound mixed with itself backwards (Riftr) */
+            uint32_t half = rd.len / 2u, m = half - rd.pos > 4096u ? 4096u : half - rd.pos;
+            float r = rd.w.reverse;
+            for (i = 0; i < m; i++) {
+                uint32_t a = rd.pos + i, b = rd.len - 1u - a;
+                float x = rd_raw(a), y = rd_raw(b);
+                rd_put_raw(a, x * (1.0f - r) + y * r);
+                rd_put_raw(b, y * (1.0f - r) + x * r);
+            }
+            rd.pos += m;
+            if (rd.pos >= half) {
+                rd.state = rd.w.necho ? RD_ECHO : RD_SUM;
+                rd.pos = rd.w.necho ? rd.len : 0;
+            }
+            continue;
+        }
+        if (rd.state == RD_ECHO) {               /* repeats of the sound, from the end back so each reads it dry */
+            uint32_t m = rd.pos > 4096u ? 4096u : rd.pos;
+            for (i = 0; i < m; i++) {
+                uint32_t j = rd.pos - 1u - i;
+                float x = rd_raw(j);
+                for (uint32_t r = 0; r < rd.w.necho; r++)
+                    if (j >= rd.w.echo_off[r])
+                        x += rd_raw(j - rd.w.echo_off[r]) * rd.w.echo_gain[r];
+                rd_put_raw(j, x);
+            }
+            rd.pos -= m;
+            if (rd.pos == 0)
+                rd.state = RD_SUM;
+            continue;
+        }
+        if (rd.state == RD_SUM) {                /* the mean, after all that */
+            uint32_t m = rd.len - rd.pos > 4096u ? 4096u : rd.len - rd.pos;
+            for (i = 0; i < m; i++) {
+                float y = rd_raw(rd.pos + i) - rd.comp, t = rd.sum + y;
+                rd.comp = (t - rd.sum) - y;
+                rd.sum = t;
+            }
+            rd.pos += m;
+            if (rd.pos >= rd.len) {
+                rd.mean = rd.len ? rd.sum / (float)rd.len : 0.0f;
+                rd.pos = 0;
+                rd.state = RD_FINISH;
+            }
             continue;
         }
         if (n)
@@ -596,21 +676,27 @@ static void rd_tick(uint32_t budget_us)
                 if (rd.keep)
                     ((int16_t *)(void *)sb_mem)[rd.pos + i] =
                         (int16_t)(fm_clampf(v, -RD_KEEP_SCALE, RD_KEEP_SCALE) * (32767.0f / RD_KEEP_SCALE));
+                else if (rd.whole)
+                    sb_mem[rd.pos + i] = mulaw(v * (1.0f / RD_KEEP_SCALE));
             }
             rd.pos += n;
             if (rd.pos >= rd.len) {
                 rd.mean = rd.len ? rd.sum / (float)rd.len : 0.0f;
-                if (!rd.keep)
+                if (!rd.keep && !rd.whole)
                     (void)e->begin(vm.mem, rd.p);    /* again from the start, for the samples */
                 rd.pos = 0;
-                rd.state = rd.keep ? RD_FINISH : RD_OUT;
+                rd.state = rd.whole ? (rd.w.reverse > 0 ? RD_REVERSE : RD_ECHO) : rd.keep ? RD_FINISH : RD_OUT;
+                if (rd.state == RD_ECHO)
+                    rd.pos = rd.len;             /* (the echoes go from the end back) */
             }
         } else {
             for (i = 0; i < n; i++) {
                 uint32_t j = rd.pos + i;
                 float v = blk[i];
                 v = v - v == 0.0f ? v - rd.mean : 0.0f;
-                sb_mem[j] = mulaw(fm_tanhf(v) * rd_fade(j));
+                v = fm_tanhf(v) * rd_fade(j);
+                rd.peak = fm_maxf(rd.peak, fm_fabsf(v));
+                sb_mem[j] = mulaw(v);
             }
             rd.pos += n;
             if (rd.pos >= rd.len)

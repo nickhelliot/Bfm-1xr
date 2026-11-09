@@ -62,6 +62,20 @@ int main(int argc, char **argv)
             for (uint32_t o = 0; o < len; o += 256)
                 SYN_ENGINES[si].run(state, out + o, len - o < 256 ? len - o : 256);
             int wide = len * 2u <= 220500u;      /* app.c: up to 2.5 s kept as 16 bits, longer as µ-law bytes */
+            syn_whole_t w;
+            memset(&w, 0, sizeof w);
+            if (SYN_ENGINES[si].whole)           /* the whole sound's own work, as app.c does it */
+                SYN_ENGINES[si].whole(p, len, &w);
+            if (w.reverse > 0)
+                for (uint32_t i = 0; i < len / 2u; i++) {
+                    float a = out[i], b = out[len - 1u - i];
+                    out[i] = a * (1 - w.reverse) + b * w.reverse;
+                    out[len - 1u - i] = b * (1 - w.reverse) + a * w.reverse;
+                }
+            for (uint32_t i = len; w.necho && i-- > 0;)
+                for (uint32_t r = 0; r < w.necho; r++)
+                    if (i >= w.echo_off[r])
+                        out[i] += out[i - w.echo_off[r]] * w.echo_gain[r];
             for (uint32_t i = 0; i < len; i++) mean += isfinite(out[i]) ? out[i] : 0;
             mean /= len ? len : 1;
             {
@@ -73,6 +87,15 @@ int main(int argc, char **argv)
                     if ((double)i / fl < fade) fade = (double)i / fl;
                     if ((double)(len - 1 - i) / fl < fade) fade = (double)(len - 1 - i) / fl;
                     out[i] = (float)(tanh(v) * vol * 0.95 * fade);
+                }
+                if (w.normalize) {                   /* (Riftr: up to 4 times louder, to a peak of 0.9) */
+                    double peak = 0;
+                    for (uint32_t i = 0; i < len; i++) peak = fabs(out[i]) > peak ? fabs(out[i]) : peak;
+                    if (peak > vol * 0.00001) {
+                        double gain = vol * 0.9 / peak;
+                        gain = gain < 1 ? 1 : gain > 4 ? 4 : gain;
+                        for (uint32_t i = 0; i < len; i++) out[i] = (float)(out[i] * gain);
+                    }
                 }
             }
             if (len != nref) {

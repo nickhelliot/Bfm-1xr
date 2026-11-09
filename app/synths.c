@@ -252,6 +252,7 @@ static NOINL float ff_frac_mul(const ff_t *x, float k)     /* the fraction of x 
     f += e + x->lo * k;
     return f - fm_floorf(f);
 }
+static inline ff_t ff_set(float x) { ff_t r = {x, 0}; return r; }
 static inline ff_t ff_two_prod(float a, float b)         /* a * b exactly */
 {
     ff_t r;
@@ -2844,6 +2845,503 @@ static void fractr_run(void *st, float *out, uint32_t n)
     f->i += n;
 }
 
+/* half floats (IEEE 754 binary16), for big delay lines: 1 part in 2000, tiny values flushed */
+static inline uint16_t f2h(float f)
+{
+    fm_bits_t b;
+    uint32_t sg, m;
+    int32_t e;
+    b.f = f;
+    sg = (b.u >> 16) & 0x8000u;
+    e = (int32_t)((b.u >> 23) & 0xFFu) - 112;    /* - 127 + 15 */
+    m = (b.u & 0x7FFFFFu) + 0x1000u;             /* (rounded) */
+    if (m & 0x800000u) {
+        m = 0;
+        e++;
+    }
+    if (e <= 0)
+        return (uint16_t)sg;
+    if (e >= 31)
+        return (uint16_t)(sg | 0x7BFFu);
+    return (uint16_t)(sg | (uint32_t)e << 10 | m >> 13);
+}
+static inline float h2f(uint16_t h)
+{
+    fm_bits_t b;
+    uint32_t e = (h >> 10) & 0x1Fu;
+    b.u = (uint32_t)(h & 0x8000u) << 16;
+    if (e)
+        b.u |= (e + 112u) << 23 | (uint32_t)(h & 0x3FFu) << 13;
+    return b.f;
+}
+
+/* ---- Riftr: a four-line feedback delay network, its junction orthogonal, its taps moving; allpasses disperse it ---- */
+#define RI_LINES 22600u                  /* the four lines, half floats */
+#define RI_AP 2480u                      /* the four allpasses */
+typedef struct { uint32_t off, len, index; float delay, depth, step, phase0, real, imag, c, s, filter, read; } riftr_line_t;
+typedef struct { uint32_t off, len, index; } riftr_ap_t;
+typedef struct {
+    syn_rng_t rng;
+    uint32_t i, count, excitation;
+    float bend, feedback, dispersion, motion, field, base_inc, pitch_step, ap_gain, damping;
+    float pulse_r, tear_r, pulse, tear, noise_low, phase_off, packet_env, packet_r;
+    ff_t packet, packet_step;            /* (in two floats: when a packet starts decides the draws) */
+    ff_t phase;                          /* in turns */
+    riftr_line_t ln[4];
+    riftr_ap_t ap[4];
+    float apbuf[RI_AP];
+    uint16_t lines[RI_LINES];
+} riftr_t;
+
+static COLD uint32_t riftr_begin(void *st, const float *p)
+{
+    static const float RATIOS[4] = {0.719f, 1, 1.337f, 1.731f}, AP[4] = {0.0023f, 0.0051f, 0.0113f, 0.0197f};
+    riftr_t *r = st;
+    float space, base_delay, duration = syn_clamp(p[RIFTR_duration], 0.15f, 6.0f);
+    uint32_t off = 0;
+    syn_rng_seed(&r->rng, syn_clamp(p[RIFTR_seed], 0, 1));
+    r->count = syn_len(duration);
+    r->excitation = (uint32_t)fm_floorf(syn_clamp(p[RIFTR_excitation], 0, 4) + 0.5f);
+    r->bend = syn_clamp(p[RIFTR_bend], -1, 1);
+    space = syn_clamp(p[RIFTR_space], 0, 1);
+    r->feedback = syn_clamp(p[RIFTR_feedback], 0, 1) * 0.955f;
+    r->dispersion = syn_clamp(p[RIFTR_dispersion], 0, 1);
+    r->motion = syn_clamp(p[RIFTR_motion], 0, 1);
+    r->field = syn_clamp(p[RIFTR_field], 0, 1);
+    r->base_inc = 55.0f * fm_exp2f(syn_clamp(p[RIFTR_pitch], 0, 1) * 5.8f) / RATE;   /* in turns */
+    r->pitch_step = fm_exp2f(r->bend * 3.0f / (float)r->count);
+    base_delay = (0.003f + space * space * 0.095f) * RATE;
+    for (uint32_t k = 0; k < 4; k++) {
+        riftr_line_t *l = &r->ln[k];
+        float phase = syn_rnd(&r->rng) * TAU;
+        l->delay = fm_maxf(7.0f, base_delay * RATIOS[k]);
+        l->depth = r->motion * l->delay * 0.09f;
+        l->step = (0.17f + r->motion * 2.3f) * (1.0f + (float)k * 0.13f) / RATE;   /* in turns */
+        l->phase0 = phase * ITAU;
+        l->len = ceil_u(l->delay + l->depth + 3.0f);
+        if (off + l->len > RI_LINES)
+            l->len = RI_LINES - off;             /* (never: the lines fit) */
+        l->off = off;
+        off += l->len;
+        l->index = 0;
+        l->filter = l->read = 0;
+    }
+    for (uint32_t k = 0; k < off; k++)
+        r->lines[k] = 0;
+    off = 0;
+    for (uint32_t k = 0; k < 4; k++) {
+        riftr_ap_t *a = &r->ap[k];
+        a->len = (uint32_t)fm_maxf(1.0f, fm_floorf(AP[k] * RATE * (0.3f + space) * (0.1f + r->dispersion) + 0.5f));
+        if (off + a->len > RI_AP)
+            a->len = RI_AP - off;
+        a->off = off;
+        off += a->len;
+        a->index = 0;
+    }
+    for (uint32_t k = 0; k < off; k++)
+        r->apbuf[k] = 0;
+    r->ap_gain = 0.15f + r->dispersion * 0.59f;
+    r->damping = 0.48f + (1.0f - r->dispersion) * 0.4f;
+    r->pulse_r = fm_expf(-1.0f / (RATE * (0.015f + space * 0.025f)));
+    r->tear_r = fm_expf(-1.0f / (RATE * (0.025f + duration * 0.16f)));
+    r->pulse = r->tear = 1;
+    r->noise_low = 0;
+    r->phase.hi = r->phase.lo = 0;
+    r->phase_off = syn_rnd(&r->rng) * TAU;
+    r->packet_env = 0;
+    r->packet = ff_set(0);
+    {
+        float num = 8.0f + r->motion * 28.0f;     /* (num / RATE in two floats) */
+        ff_t e;
+        r->packet_step.hi = num / RATE;
+        e = ff_two_prod(r->packet_step.hi, RATE);
+        r->packet_step.lo = ((num - e.hi) - e.lo) / RATE;
+    }
+    r->packet_r = fm_expf(-1.0f / (RATE * 0.013f));
+    r->i = 0;
+    return r->count;
+}
+
+static void riftr_whole(const float *p, uint32_t len, syn_whole_t *w)
+{
+    (void)len;
+    w->reverse = syn_clamp(p[RIFTR_reverse], 0, 1);
+    w->normalize = 1;                            /* a field that cancels its excitation brought back up */
+}
+
+static void riftr_run(void *st, float *out, uint32_t n)
+{
+    riftr_t *r = st;
+    float inc = r->base_inc * fm_exp2f(r->bend * 3.0f * (float)r->i / (float)r->count);   /* exact at the block's start */
+    for (uint32_t k = 0; k < 4; k++) {           /* the taps' motion, exact at the block's start */
+        riftr_line_t *l = &r->ln[k];
+        float a = l->phase0 + l->step * (float)r->i;
+        a -= fm_floorf(a);
+        l->real = fm_sin_turns(a + 0.25f);
+        l->imag = fm_sin_turns(a);
+        l->c = fm_sin_turns(l->step + 0.25f);
+        l->s = fm_sin_turns(l->step);
+    }
+    for (uint32_t q = 0; q < n; q++, r->i++) {
+        uint32_t i = r->i;
+        float progress = (float)i / (float)(r->count - 1u), noise, carrier, input, sum = 0, wet, ph;
+        ff_add(&r->phase, inc);
+        inc *= r->pitch_step;
+        noise = syn_rnd(&r->rng) * 2.0f - 1.0f;
+        r->noise_low += (noise - r->noise_low) * 0.12f;
+        ph = ff_frac_mul(&r->phase, 1.0f);
+        carrier = fm_sin_turns(ph + 0.55f * fm_sin_turns(ff_frac_mul(&r->phase, 1.417f) + r->phase_off * ITAU) * ITAU);
+        switch (r->excitation) {
+        case 1: {
+            float arc = fm_maxf(0.0f, fm_sinf(PI * fm_minf(1.0f, progress / 0.72f)));
+            input = (carrier * 0.65f + ff_sin(&r->phase, 0.498f) * 0.28f + r->noise_low * 0.12f) * arc * arc;
+            break;
+        }
+        case 2:
+            input = (carrier * 0.48f + ff_sin(&r->phase, 0.501f) * 0.32f) * fm_sinf(PI * progress) *
+                    (0.65f + 0.35f * fm_sinf(TAU * progress * (2.0f + r->motion * 7.0f)));
+            break;
+        case 3:
+            input = (r->noise_low * 0.95f + carrier * 0.36f + ff_sin(&r->phase, 0.25f) * 0.21f) * r->tear;
+            break;
+        case 4:
+            ff_add(&r->packet, r->packet_step.hi);
+            r->packet.lo += r->packet_step.lo;
+            if ((r->packet.hi - 1.0f) + r->packet.lo >= 0 || i == 0) {
+                float f = ff_floor(&r->packet);
+                r->packet.hi -= f;
+                r->packet_env = 0.45f + syn_rnd(&r->rng) * 0.5f;
+            }
+            input = (fm_sin_turns(ph + (float)(i * 13u / (r->count - 1u)) * 1.7f * ITAU) + noise * 0.12f) * r->packet_env *
+                    (1.0f - progress);
+            r->packet_env *= r->packet_r;
+            break;
+        default:
+            input = (carrier * 0.9f + ff_sin(&r->phase, 2.071f) * 0.18f + r->noise_low * 0.04f) * r->pulse;
+        }
+        r->pulse = fm_flush(r->pulse * r->pulse_r);
+        r->tear = fm_flush(r->tear * r->tear_r);
+        for (uint32_t k = 0; k < 4; k++) {       /* the moving taps */
+            riftr_line_t *l = &r->ln[k];
+            float nr = l->real * l->c - l->imag * l->s, pos, fr, x;
+            uint32_t before, after;
+            l->imag = l->real * l->s + l->imag * l->c;
+            l->real = nr;
+            pos = (float)l->index - l->delay - l->depth * l->imag;
+            if (pos < 0)
+                pos += (float)l->len;
+            before = (uint32_t)pos;
+            if (before >= l->len)
+                before = l->len - 1u;
+            fr = pos - (float)before;
+            after = before + 1u == l->len ? 0u : before + 1u;
+            x = h2f(r->lines[l->off + before]) * (1.0f - fr) + h2f(r->lines[l->off + after]) * fr;
+            l->filter += (x - l->filter) * r->damping;
+            l->filter = fm_flush(l->filter);
+            l->read = l->filter;
+            sum += l->read;
+        }
+        for (uint32_t k = 0; k < 4; k++) {       /* I - 2vv', v = (1, 1, 1, 1) / 2: the junction keeps the energy */
+            riftr_line_t *l = &r->ln[k];
+            r->lines[l->off + l->index] = f2h(input * 0.5f + r->feedback * (l->read - sum * 0.5f));
+            if (++l->index == l->len)
+                l->index = 0;
+        }
+        wet = sum * 0.65f;
+        if (r->dispersion > 0)
+            for (uint32_t k = 0; k < 4; k++) {
+                riftr_ap_t *a = &r->ap[k];
+                float d = r->apbuf[a->off + a->index], sc = d - r->ap_gain * wet;
+                r->apbuf[a->off + a->index] = fm_flush(wet + r->ap_gain * sc);
+                if (++a->index == a->len)
+                    a->index = 0;
+                wet = sc;
+            }
+        out[q] = (1.0f - r->field) * input + r->field * wet;
+    }
+}
+
+/* ---- Glitchr: captured plucks and transients, damaged by read and coding failures ---- */
+#define GL_SRC 36603u                    /* 0.83 s of source, 12 bits a sample */
+#define GL_MAXG 24
+typedef struct { uint32_t age, len; ff_t head; float speed; } glitchr_grain_t;
+typedef struct {
+    syn_rng_t rng;
+    uint32_t i, length, mode, chunk, hold, ngr, grain_count, data_count, shift, data_bit;
+    float base, fragment, repeat, chaos, dropout, crush, rate_loss, steps;
+    ff_t head;                           /* the read head, in two floats (bfxr2's moves in double) */
+    float anchor, speed, sample, previous, dc, scrub_low, data_phase, band[3], gain4[4], grain_origin;
+    uint8_t skip;
+    float fphase[6], ffreq[6], fgain[6];
+    glitchr_grain_t g[GL_MAXG];
+    uint8_t src[GL_SRC * 3u / 2u + 2u];
+} glitchr_t;
+
+static inline float gl_get(const glitchr_t *g, uint32_t i)   /* source sample i: 12 bits, -2 .. 2 */
+{
+    const uint8_t *b = g->src + (i >> 1) * 3u;
+    int32_t v = i & 1u ? (int32_t)(b[1] >> 4 | (uint32_t)b[2] << 4) : (int32_t)(b[0] | (uint32_t)(b[1] & 15u) << 8);
+    return (float)(v - 2048) * (2.0f / 2048.0f);
+}
+static inline void gl_set(glitchr_t *g, uint32_t i, float x)
+{
+    uint8_t *b = g->src + (i >> 1) * 3u;
+    int32_t v = (int32_t)fm_floorf(fm_clampf(x, -2.0f, 1.999f) * (2048.0f / 2.0f) + 0.5f) + 2048;
+    if (v > 4095)
+        v = 4095;
+    if (i & 1u) {
+        b[1] = (uint8_t)((b[1] & 15u) | (uint32_t)(v & 15) << 4);
+        b[2] = (uint8_t)(v >> 4);
+    } else {
+        b[0] = (uint8_t)v;
+        b[1] = (uint8_t)((b[1] & 0xF0u) | (uint32_t)(v >> 8));
+    }
+}
+static float gl_read(const glitchr_t *g, float position)   /* the source at a position, wrapped, between samples */
+{
+    float n = (float)GL_SRC, w = position - fm_floorf(position / n) * n, mix;
+    uint32_t idx;
+    if (w >= n)
+        w -= n;
+    idx = (uint32_t)w;
+    if (idx >= GL_SRC)
+        idx = GL_SRC - 1u;
+    mix = w - (float)idx;
+    return gl_get(g, idx) * (1.0f - mix) + gl_get(g, (idx + 1u) % GL_SRC) * mix;
+}
+
+static float gl_read_ff(const glitchr_t *g, ff_t pos)     /* gl_read at a position in two floats */
+{
+    float n = (float)GL_SRC, w = fm_floorf(pos.hi / n) * n, i0, mix;
+    uint32_t idx;
+    pos.hi -= w;                                 /* (exact: w is a whole multiple, and pos.hi near it) */
+    i0 = fm_floorf(pos.hi);
+    mix = (pos.hi - i0) + pos.lo;
+    while (mix < 0) {
+        mix += 1.0f;
+        i0 -= 1.0f;
+    }
+    while (mix >= 1.0f) {
+        mix -= 1.0f;
+        i0 += 1.0f;
+    }
+    if (i0 < 0)
+        i0 += n;
+    if (i0 >= n)
+        i0 -= n;
+    idx = (uint32_t)i0;
+    if (idx >= GL_SRC)
+        idx = GL_SRC - 1u;
+    return gl_get(g, idx) * (1.0f - mix) + gl_get(g, (idx + 1u) % GL_SRC) * mix;
+}
+
+static COLD uint32_t glitchr_begin(void *st, const float *p)
+{
+    static const float NOTES[5] = {1, 1.25f, 0.75f, 1.5f, 1.125f};
+    glitchr_t *g = st;
+    float low = 0;
+    syn_rng_seed(&g->rng, syn_clamp(p[GLITCHR_seed], 0, 1));
+    g->length = syn_len(syn_clamp(p[GLITCHR_duration], 0.08f, 4.0f));
+    g->mode = (uint32_t)fm_floorf(syn_clamp(p[GLITCHR_mode], 0, 7) + 0.5f);
+    g->base = 80.0f * fm_exp2f(syn_clamp(p[GLITCHR_pitch], 0, 1) * 4.0f);
+    g->fragment = syn_clamp(p[GLITCHR_fragment], 0, 1);
+    g->repeat = syn_clamp(p[GLITCHR_repeat], 0, 1);
+    g->chaos = syn_clamp(p[GLITCHR_chaos], 0, 1);
+    g->dropout = syn_clamp(p[GLITCHR_dropout], 0, 1);
+    g->crush = syn_clamp(p[GLITCHR_crush], 0, 1);
+    g->rate_loss = syn_clamp(p[GLITCHR_rate], 0, 1);
+    g->chunk = (uint32_t)fm_maxf(80.0f, fm_floorf((0.009f + g->fragment * 0.18f) * RATE + 0.5f));
+    g->hold = 1u + (uint32_t)fm_floorf(g->rate_loss * 27.0f + 0.5f);
+    g->steps = fm_exp2f(13.0f - fm_floorf(g->crush * 11.0f + 0.5f));
+    for (uint32_t i = 0; i < GL_SRC; i++) {      /* a short, evolving source: plucks with attacks and timbre */
+        float t = (float)i / RATE, note = fm_floorf(t / 0.137f), local = t - note * 0.137f;
+        float f = g->base * NOTES[(uint32_t)note % 5u], noise = syn_rnd(&g->rng) * 2.0f - 1.0f, pl, tr, a, b, c;
+        low += (noise - low) * 0.12f;
+        a = f * local;
+        b = f * 2.01f * local;
+        c = f * 3.97f * local;
+        pl = (fm_sin_turns(a - fm_floorf(a)) + 0.35f * fm_sin_turns(b - fm_floorf(b)) + 0.18f * fm_sin_turns(c - fm_floorf(c))) *
+             fm_expf(-local * 18.0f);
+        tr = (noise - low) * fm_expf(-local * 120.0f) * 0.25f;
+        gl_set(g, i, (pl * 0.55f + tr + low * 0.24f) * fm_minf(1.0f, local / 0.001f));
+    }
+    g->head = ff_set(0);
+    g->anchor = g->sample = g->previous = g->dc = g->scrub_low = g->data_phase = 0;
+    g->speed = 1;
+    g->skip = 0;
+    g->data_bit = g->data_count = 0;
+    g->shift = 1u + (uint32_t)fm_floorf(syn_rnd(&g->rng) * 65534.0f);
+    g->band[0] = g->band[1] = g->band[2] = 0;
+    for (uint32_t k = 0; k < 4; k++)
+        g->gain4[k] = 1;
+    for (uint32_t k = 0; k < 6; k++) {
+        g->fphase[k] = syn_rnd(&g->rng) * TAU;
+        g->ffreq[k] = g->base * (1.0f + (float)k * 0.51f);
+        g->fgain[k] = 0;
+    }
+    g->ngr = 0;
+    g->grain_count = 0;
+    g->grain_origin = 0;
+    g->i = 0;
+    return g->length;
+}
+
+static void glitchr_run(void *st, float *out, uint32_t n)
+{
+    glitchr_t *g = st;
+    for (uint32_t q = 0; q < n; q++, g->i++) {
+        uint32_t i = g->i, j = i % g->chunk;
+        float t = (float)i / RATE, value = 0;
+        if (j == 0) {                            /* a packet: fresh, or the last one again */
+            int fresh = i == 0 || syn_rnd(&g->rng) > g->repeat;
+            g->skip = i > 0 && syn_rnd(&g->rng) < g->dropout * 0.86f;
+            if (fresh) {
+                g->anchor = fm_floorf(syn_rnd(&g->rng) * (float)(GL_SRC - g->chunk));
+                g->speed = fm_exp2f((syn_rnd(&g->rng) - 0.5f) * g->chaos * 2.4f);
+                g->grain_origin = g->anchor;
+            }
+            if (g->mode == 0 || g->mode == 6)
+                g->head = ff_set(g->anchor);
+            if (g->mode == 2) {
+                float dir;
+                if (fresh)
+                    g->head = ff_set(g->anchor);
+                dir = syn_rnd(&g->rng) < 0.55f ? -1.0f : 1.0f;
+                g->speed = dir * (0.2f + syn_rnd(&g->rng) * 2.8f) * (0.4f + g->chaos);
+            }
+            for (uint32_t k = 0; k < 4; k++)
+                g->gain4[k] = 0.25f + syn_rnd(&g->rng) * 1.2f;
+            if (g->mode == 7 && fresh)
+                for (uint32_t k = 0; k < 6; k++) {   /* the partials' levels, measured from the packet */
+                    float re = 0, im = 0, step;
+                    g->ffreq[k] = fm_minf(9000.0f, g->base * (0.5f + fm_floorf(syn_rnd(&g->rng) * 11.0f + 0.5f) / 4.0f));
+                    step = g->ffreq[k] / RATE;
+                    for (uint32_t m = 0; m < 256; m++) {
+                        float c = gl_read(g, g->anchor + (float)m), a = step * (float)m;
+                        a -= fm_floorf(a);
+                        re += c * fm_sin_turns(a + 0.25f);
+                        im += c * fm_sin_turns(a);
+                    }
+                    g->fgain[k] = 0.025f + fm_minf(0.22f, fm_sqrtf(re * re + im * im) / 128.0f);
+                }
+        }
+        switch (g->mode) {
+        case 0:                                  /* a stalled buffer, replayed until a fresh packet comes */
+            value = gl_read_ff(g, g->head);
+            ff_add(&g->head, g->speed);
+            if ((g->head.hi - (g->anchor + (float)g->chunk)) + g->head.lo >= 0)
+                g->head = ff_set(g->anchor);
+            value *= fm_minf(1.0f, fm_minf((float)j / 16.0f, (float)(g->chunk - j) / 16.0f));
+            break;
+        case 1: {                                /* crude subband coding: bands with damaged gains and precision */
+            float c = gl_read_ff(g, g->head), bands[4], x;
+            x = (8.0f + g->fragment * 25.0f) * t;
+            ff_add(&g->head, g->speed * (1.0f + g->chaos * 0.45f * fm_sin_turns(x - fm_floorf(x))));
+            g->band[0] += (c - g->band[0]) * 0.018f;
+            g->band[1] += (c - g->band[1]) * 0.11f;
+            g->band[2] += (c - g->band[2]) * 0.43f;
+            bands[0] = g->band[0];
+            bands[1] = g->band[1] - g->band[0];
+            bands[2] = g->band[2] - g->band[1];
+            bands[3] = c - g->band[2];
+            for (uint32_t b = 0; b < 4; b++) {
+                float res = fm_exp2f(3.0f + (float)b - g->crush * 2.0f), coded = fm_floorf(bands[b] * res + 0.5f) / res;
+                float y = (11.0f + (float)b * 7.0f + g->chaos * 13.0f) * t;
+                value += coded * g->gain4[b] * (0.7f + 0.3f * fm_sin_turns(y - fm_floorf(y) + (float)b * ITAU));
+            }
+            x = g->base * 1.43f * t;
+            value = value * 1.7f + fm_sin_turns(x - fm_floorf(x)) * fm_fabsf(g->band[1] - g->band[0]) * g->chaos * 0.6f;
+            break;
+        }
+        case 2: {                                /* a reversible read head; between samples, tape-like bends */
+            float x = (1.5f + g->fragment * 5.0f) * t, c;
+            ff_add(&g->head, g->speed * (1.0f + g->chaos * 0.8f * fm_sin_turns(x - fm_floorf(x))));
+            c = gl_read_ff(g, g->head);
+            g->scrub_low += (c - g->scrub_low) * fm_minf(0.95f, 0.07f + fm_fabsf(g->speed) * 0.19f);
+            value = g->scrub_low * 1.5f + (syn_rnd(&g->rng) * 2.0f - 1.0f) * 0.018f * g->chaos;
+            break;
+        }
+        case 3: {
+            uint32_t dec = 2u + (uint32_t)fm_floorf(g->rate_loss * 95.0f + g->crush * 25.0f * ((float)i / (float)g->length) + 0.5f);
+            if (i % dec == 0) {
+                float levels = fm_exp2f(8.0f - fm_floorf(g->crush * 6.0f + 0.5f)), c = gl_read_ff(g, g->head);
+                int32_t word = (int32_t)fm_floorf((c + 1.0f) * levels + 0.5f);
+                if (syn_rnd(&g->rng) < g->chaos * 0.22f)
+                    word ^= 1 << (uint32_t)(syn_rnd(&g->rng) * fm_maxf(1.0f, fm_floorf(g->crush * 7.0f + 0.5f)));
+                g->previous = (float)word / levels - 1.0f;
+            }
+            ff_add(&g->head, 0.65f + g->speed * 0.45f);
+            value = g->previous * 0.85f;
+            break;
+        }
+        case 4: {                                /* a shift register's binary FSK, and its logic edges leaking */
+            float c;
+            if (g->data_count-- == 0 || (int32_t)(g->data_count + 1u) <= 0) {
+                g->shift = ((g->shift >> 1) ^ ((0u - (g->shift & 1u)) & 0xB400u)) & 65535u;
+                g->data_bit = g->shift & 1u;
+                g->data_count = (uint32_t)fm_floorf(RATE / (100.0f + g->fragment * 1700.0f) + 0.5f);
+            }
+            g->data_phase += fm_minf(RATE * 0.42f, g->base * (g->data_bit ? 7.3f + g->chaos : 4.17f)) / RATE;
+            if (g->data_phase >= 1.0f)
+                g->data_phase -= 1.0f;
+            c = fm_sin_turns(g->data_phase);
+            value = (c > 0 ? 1.0f : -1.0f) * 0.30f + c * 0.22f + ((float)g->data_bit * 2.0f - 1.0f) * 0.08f;
+            break;
+        }
+        case 5: {                                /* overlapping windowed grains, jumping, some backwards */
+            if (g->grain_count-- == 0 || (int32_t)(g->grain_count + 1u) <= 0) {
+                uint32_t len = (uint32_t)fm_maxf(100.0f, fm_floorf((float)g->chunk * (0.6f + syn_rnd(&g->rng) * 0.9f) + 0.5f));
+                float head = g->grain_origin + (syn_rnd(&g->rng) - 0.5f) * (float)GL_SRC * g->chaos;
+                float sp = fm_exp2f((syn_rnd(&g->rng) - 0.5f) * g->chaos * 3.0f);
+                if (syn_rnd(&g->rng) < g->chaos * 0.5f)
+                    sp = -sp;
+                if (g->ngr < GL_MAXG) {
+                    glitchr_grain_t *x = &g->g[g->ngr++];
+                    x->age = 0;
+                    x->len = len;
+                    x->head = ff_set(head);
+                    x->speed = sp;
+                }
+                g->grain_count = (uint32_t)fm_maxf(30.0f, fm_floorf((float)len / (2.5f + g->repeat * 2.0f) + 0.5f));
+            }
+            for (int32_t k = (int32_t)g->ngr - 1; k >= 0; k--) {
+                glitchr_grain_t *x = &g->g[k];
+                float a = (float)x->age / (float)x->len;
+                value += gl_read_ff(g, x->head) * (0.5f - 0.5f * fm_sin_turns(a + 0.25f)) * 0.8f;
+                ff_add(&x->head, x->speed);
+                if (++x->age >= x->len) {
+                    for (uint32_t m = (uint32_t)k + 1u; m < g->ngr; m++)
+                        g->g[m - 1u] = g->g[m];
+                    g->ngr--;
+                }
+            }
+            break;
+        }
+        case 6: {                                /* a captured phrase retriggered inside a longer packet */
+            uint32_t phrase = (uint32_t)fm_maxf(55.0f, fm_floorf((float)g->chunk / (1.0f + fm_floorf(g->repeat * 5.0f + 0.5f)) + 0.5f));
+            uint32_t pos = j % phrase;
+            value = gl_read(g, g->anchor + (float)pos * (0.65f + g->speed * 0.35f)) *
+                    fm_minf(1.0f, fm_minf((float)pos / 12.0f, (float)(phrase - pos) / 12.0f));
+            value *= 0.6f + 0.4f * fm_expf(-(float)pos / ((float)phrase * 0.25f));
+            break;
+        }
+        default: {                               /* the measured partials, their phases running on across packets */
+            float x = 3.0f * t, w = 1.0f + g->chaos * 0.012f * fm_sin_turns(x - fm_floorf(x));
+            for (uint32_t k = 0; k < 6; k++) {
+                g->fphase[k] += TAU * g->ffreq[k] * w / RATE;
+                if (g->fphase[k] >= TAU)
+                    g->fphase[k] -= TAU;
+                value += fm_sinf(g->fphase[k]) * g->fgain[k];
+            }
+        }
+        }
+        if (i % g->hold == 0)
+            g->sample = fm_floorf(value * g->steps + 0.5f) / g->steps;
+        g->dc += (g->sample - g->dc) * 0.001f;   /* a slow DC blocker: flipped bits and pulses keep their baseline */
+        out[q] = g->skip ? 0.0f : (g->sample - g->dc) * 0.85f;
+    }
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -2861,6 +3359,8 @@ const syn_engine_t SYN_ENGINES[] = {
     {clonkr_begin, clonkr_run},
     {boomr_begin, boomr_run},
     {fractr_begin, fractr_run},
+    {riftr_begin, riftr_run, riftr_whole},
+    {glitchr_begin, glitchr_run},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
@@ -2870,4 +3370,5 @@ _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_S
                sizeof(zappr_t) <= SYN_STATE_BYTES && sizeof(signlr_t) <= SYN_STATE_BYTES &&
                sizeof(pluckr_t) <= SYN_STATE_BYTES && sizeof(rustlr_t) <= SYN_STATE_BYTES &&
                sizeof(squishr_t) <= SYN_STATE_BYTES && sizeof(clonkr_t) <= SYN_STATE_BYTES &&
-               sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES &&
+               sizeof(riftr_t) <= SYN_STATE_BYTES && sizeof(glitchr_t) <= SYN_STATE_BYTES, "synth state");

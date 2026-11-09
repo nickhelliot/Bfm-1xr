@@ -3,7 +3,7 @@
 BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
 hits, jumps and blips, made the way bfxr.net makes them and played from the keys. Press **ENV** for bfxr.net's other
 synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines, critters, zaps, signals, plucks, rustles,
-squishes, clonks, booms and breaks, each on its own screen.
+squishes, clonks, booms, breaks, rifts and glitches, each on its own screen.
 
 ![The BFMXR screen](docs/screen.png)
 
@@ -112,6 +112,8 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **CLONKR** | Things hit, scraped or rattled: wood, glass, metal, ceramic, rubber |
 | **BOOMR** | Explosions: grenades, barrels, depth charges, collapses, pops, gas, implosions |
 | **FRACTR** | Breaking: glass, ice, crystal, stone, armor, bone, biscuit |
+| **RIFTR** | Rifts and portals: a resonant delay network, bent and dispersed, played backwards if you like |
+| **GLITCHR** | Digital damage: buffer underruns, codec warble, tape scrub, bit rot, data squeal, stutter |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
 

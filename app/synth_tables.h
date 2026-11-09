@@ -606,8 +606,75 @@ static const syn_recipe_t FRACTR_RECIPES[10] = {
     {"BISCUIT CRUNCH", FRACTR_R9, 11},
 };
 
+enum { RIFTR_masterVolume, RIFTR_seed, RIFTR_excitation, RIFTR_duration, RIFTR_pitch, RIFTR_bend, RIFTR_space, RIFTR_feedback, RIFTR_dispersion, RIFTR_motion, RIFTR_field, RIFTR_reverse, RIFTR_NP };
+static const syn_param_t RIFTR_P[12] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"excitation", "EXCITATION", 0.0f, 0.0f, 4.0f, "PULSE|ARC|DRONE|TEAR|QUANTA", 0, 0, 0},
+    {"duration", "DURATION", 1.8f, 0.15f, 6.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"bend", "BEND", -0.2f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"space", "SPACE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"feedback", "FEEDBACK", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"dispersion", "DISPERSION", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"motion", "MOTION", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"field", "FIELD MIX", 0.7f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"reverse", "REVERSE", 0.0f, 0.0f, 1.0f, 0, 0, 0, 0},
+};
+static const syn_rv_t RIFTR_R0[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 1.5f, 3.0f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.35f, 0.6f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -1.0f, -0.55f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.65f, 0.9f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.6f, 0.9f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const syn_rv_t RIFTR_R1[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 1.0f, 2.6f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -0.65f, 0.3f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.72f, 0.95f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.93f, 1.0f, 0}};
+static const syn_rv_t RIFTR_R2[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 0.18f, 0.5f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, 0.35f, 0.95f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.03f, 0.25f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.55f, 1.0f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}};
+static const syn_rv_t RIFTR_R3[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 1.5f, 3.8f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.18f, 0.5f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -0.12f, 0.12f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.04f, 0.35f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.72f, 0.98f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.15f, 0.55f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}};
+static const syn_rv_t RIFTR_R4[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 1.0f, 2.8f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, 0.3f, 0.9f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.5f, 0.95f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.5f, 1.0f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}};
+static const syn_rv_t RIFTR_R5[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 0.45f, 1.2f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -0.7f, -0.1f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.1f, 0.6f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.78f, 1.0f, 0}};
+static const syn_rv_t RIFTR_R6[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 2.5f, 5.0f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -1.0f, -0.45f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.0f, 0.18f, 0}};
+static const syn_rv_t RIFTR_R7[10] = {{RIFTR_excitation, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {RIFTR_duration, SYN_RV_RANGE, 0, 0.65f, 1.9f, 0}, {RIFTR_pitch, SYN_RV_RANGE, 0, 0.45f, 0.95f, 0}, {RIFTR_bend, SYN_RV_RANGE, 0, -0.8f, 0.9f, 0}, {RIFTR_space, SYN_RV_RANGE, 0, 0.08f, 0.55f, 0}, {RIFTR_feedback, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {RIFTR_dispersion, SYN_RV_RANGE, 0, 0.25f, 0.9f, 0}, {RIFTR_motion, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {RIFTR_field, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {RIFTR_reverse, SYN_RV_RANGE, 0, 0.25f, 0.75f, 0}};
+static const syn_recipe_t RIFTR_RECIPES[8] = {
+    {"GRAVITY WELL", RIFTR_R0, 10},
+    {"TIME REWIND", RIFTR_R1, 10},
+    {"PHASE DASH", RIFTR_R2, 10},
+    {"FORCE FIELD", RIFTR_R3, 10},
+    {"PORTAL TEAR", RIFTR_R4, 10},
+    {"TELEPORT ARRIVE", RIFTR_R5, 10},
+    {"BLACK HOLE", RIFTR_R6, 10},
+    {"REALITY GLITCH", RIFTR_R7, 10},
+};
+
+enum { GLITCHR_masterVolume, GLITCHR_seed, GLITCHR_duration, GLITCHR_pitch, GLITCHR_fragment, GLITCHR_repeat, GLITCHR_chaos, GLITCHR_dropout, GLITCHR_crush, GLITCHR_rate, GLITCHR_mode, GLITCHR_NP };
+static const syn_param_t GLITCHR_P[11] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 0.7f, 0.08f, 4.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"fragment", "FRAGMENT", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"repeat", "REPEAT", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"chaos", "CHAOS", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"dropout", "DROPOUT", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"crush", "CRUSH", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"rate", "SAMPLE HOLD", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"mode", "FAILURE", 0.0f, 0.0f, 7.0f, "UNDERRUN|CODEC WARBLE|TAPE SCRUB|BIT ROT|DATA SQUEAL|GRANULAR TEAR|STUTTER|SPECTRAL FREEZE", 0, 0, 0},
+};
+static const syn_rv_t GLITCHR_R0[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.5f, 1.4f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.03f, 0.3f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}};
+static const syn_rv_t GLITCHR_R1[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.7f, 1.7f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.1f, 0.45f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.5f, 1.0f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}};
+static const syn_rv_t GLITCHR_R2[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.6f, 1.6f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.15f, 0.6f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.15f, 0.6f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.2f, 0.7f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.1f, 0.45f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.55f, 1.0f, 0}};
+static const syn_rv_t GLITCHR_R3[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 6.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.4f, 1.2f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.05f, 0.4f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.0f, 0.35f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}};
+static const syn_rv_t GLITCHR_R4[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.2f, 0.8f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.05f, 0.4f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.45f, 0.95f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}};
+static const syn_rv_t GLITCHR_R5[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.8f, 2.2f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.3f, 0.85f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}};
+static const syn_rv_t GLITCHR_R6[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.5f, 1.5f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.05f, 0.6f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.25f, 0.75f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.4f, 1.0f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}};
+static const syn_rv_t GLITCHR_R7[9] = {{GLITCHR_mode, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {GLITCHR_duration, SYN_RV_RANGE, 0, 0.6f, 1.8f, 0}, {GLITCHR_pitch, SYN_RV_RANGE, 0, 0.2f, 0.65f, 0}, {GLITCHR_fragment, SYN_RV_RANGE, 0, 0.08f, 0.55f, 0}, {GLITCHR_repeat, SYN_RV_RANGE, 0, 0.2f, 0.7f, 0}, {GLITCHR_chaos, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {GLITCHR_dropout, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {GLITCHR_crush, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {GLITCHR_rate, SYN_RV_RANGE, 0, 0.05f, 0.35f, 0}};
+static const syn_recipe_t GLITCHR_RECIPES[8] = {
+    {"BUFFER UNDERRUN", GLITCHR_R0, 9},
+    {"CODEC WARBLE", GLITCHR_R1, 9},
+    {"BIT ROT", GLITCHR_R2, 9},
+    {"PHRASE STUTTER", GLITCHR_R3, 9},
+    {"DATA SQUEAL", GLITCHR_R4, 9},
+    {"SPECTRAL FREEZE", GLITCHR_R5, 9},
+    {"TAPE SCRUB", GLITCHR_R6, 9},
+    {"GRANULAR TEAR", GLITCHR_R7, 9},
+};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 16u
+#define SYN_NPRESET 18u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES, 0},
@@ -626,4 +693,6 @@ const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"CLONKR", "Clonkr", 9, CLONKR_P, 10, CLONKR_RECIPES, 0},
     {"BOOMR", "Boomr", 15, BOOMR_P, 11, BOOMR_RECIPES, 1},
     {"FRACTR", "Fractr", 13, FRACTR_P, 10, FRACTR_RECIPES, 1},
+    {"RIFTR", "Riftr", 12, RIFTR_P, 8, RIFTR_RECIPES, 0},
+    {"GLITCHR", "Glitchr", 11, GLITCHR_P, 8, GLITCHR_RECIPES, 0},
 };
