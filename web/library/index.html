@@ -385,8 +385,10 @@ function draw() {
     const btn = (label, fn, quiet) => { const b = document.createElement('button'); b.textContent = label; if (quiet) b.className = 'quiet'; b.onclick = fn; acts.appendChild(b); };
     if (used) {
       btn('Play', () => bfxr.play(soundObject(s)));
-      btn('.bfxr', () => download(slotName(slot) + '.bfxr', new TextEncoder().encode(toBfxr(s, slotName(slot))), 'application/json'));
-      btn('.wav', () => download(slotName(slot) + '.wav', wavOf(s), 'audio/wav'));
+      if (synthName(s.synth) !== 'Mixr') {   // (a Mixr sound keeps recipes, not its sounds' settings: no file of it)
+        btn('.bfxr', () => download(slotName(slot) + '.bfxr', new TextEncoder().encode(toBfxr(s, slotName(slot))), 'application/json'));
+        btn('.wav', () => download(slotName(slot) + '.wav', wavOf(s), 'audio/wav'));
+      }
     }
     btn('Send', () => sendFile(slot), true);
     if (used && slot !== CURRENT)
@@ -404,7 +406,7 @@ $('all').onclick = () => {
   sounds.forEach((s, slot) => {
     if (!s || !s.used) return;
     const name = slotName(slot);
-    files.push([name + '.bfxr', new TextEncoder().encode(toBfxr(s, name))], [name + '.wav', wavOf(s)]);
+    if (synthName(s.synth) !== 'Mixr')     files.push([name + '.bfxr', new TextEncoder().encode(toBfxr(s, name))], [name + '.wav', wavOf(s)]);
   });
   download('bfmxr-sounds.zip', zipBytes(files), 'application/zip');
 };
