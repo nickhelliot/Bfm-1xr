@@ -3,7 +3,7 @@
 BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
 hits, jumps and blips, made the way bfxr.net makes them and played from the keys. Press **ENV** for bfxr.net's other
 synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines, critters, zaps, signals, plucks, rustles,
-squishes, clonks, booms, breaks, rifts and glitches, each on its own screen.
+squishes, clonks, booms, breaks, rifts, glitches and jingles, each on its own screen.
 
 ![The BFMXR screen](docs/screen.png)
 
@@ -114,6 +114,7 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **FRACTR** | Breaking: glass, ice, crystal, stone, armor, bone, biscuit |
 | **RIFTR** | Rifts and portals: a resonant delay network, bent and dispersed, played backwards if you like |
 | **GLITCHR** | Digital damage: buffer underruns, codec warble, tape scrub, bit rot, data squeal, stutter |
+| **JINGLR** | Little tunes for discoveries, victories and warnings, on pluck, bell, chip, flute, keys, reed, FM or strings |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
 
@@ -122,7 +123,8 @@ On another synth's screen the controls work as on Bfxr's, with that synth's own 
 - **EDIT** makes another of the same; **FX** mutates it.
 - **SELECT** and **K1 to K4** change its sliders. A choice (VOICE, MATERIAL...) shows its name and moves one step a
   click; a count (SYLLABLES, CALLS...) moves one a click.
-- **ALGO** is **VARIATION**: the same settings, a different take (bfxr.net's seed).
+- **ALGO** is **VARIATION**: the same settings, a different take (bfxr.net's seed). On Jinglr it is the melody:
+  each Variation is a different tune, written from it with NOTES, CONTOUR and RHYTHM, as bfxr.net writes it.
 - Each synth keeps its own sound: go from Whooshr to Birdr and back, and your Whooshr sound is still there. Slots
   remember which synth a sound came from, so recalling one takes you to its synth.
 

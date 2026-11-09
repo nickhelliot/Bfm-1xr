@@ -17,7 +17,7 @@ RANDOMIZE = {"Birdr": 1, "Boomr": 1, "Fractr": 1, "Crittr": 2}   # bfxr2's own r
                                                                  # Crittr's cap on the length); else every slider at random
 ROUNDED = {"Breathr": ["cycles"], "Pluckr": ["strings"], "Rustlr": ["folds"], "Zappr": ["arcs"], "Birdr": ["syllables"],
            "Choirr": ["voices"], "Crittr": ["calls"], "Fractr": ["fragments"], "Signlr": ["packets"],
-           "Swarmr": ["count"]}
+           "Swarmr": ["count"], "Jinglr": ["noteCount", "octave", "instrumentSeed"]}
 LABEL_MAX = 15
 
 

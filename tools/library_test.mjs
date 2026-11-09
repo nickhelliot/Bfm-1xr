@@ -78,6 +78,17 @@ let wd = 0;
 for (let i = 0; i < Math.min(wa.length, wb.length); i++) wd = Math.max(wd, Math.abs(wa[i] - wb[i]));
 check(JSON.parse(wout).synth_type === wname && Math.abs(wa.length - wb.length) <= 1 && wd < 0.02,
       `its .bfxr renders as on the FM-1 (largest difference ${wd.toFixed(4)})`);
+// Jinglr: its melody written into the file, as bfxr2 composes it
+{
+  const at = P.PRESET_SYNTHS.findIndex(x => x[0] === 'Jinglr');
+  if (at >= 0) {
+    const jp = bfxr.preset('Jinglr', bfxr.presets('Jinglr')[2], 5);
+    const jf = {...jp, params: Object.fromEntries(Object.entries(jp.params).map(([k, v]) => [k, typeof v === 'number' ? f32(v) : v]))};
+    const js = P.fromBfxr(JSON.stringify({synth_type: 'Jinglr', params: jf.params}));
+    const jo = JSON.parse(P.toBfxr({synth: js.synth, values: js.values.map(f32)}, 'j'));
+    check(jo.params.phrase === jp.params.phrase, 'a Jinglr file: its melody as bfxr2 composed it');
+  }
+}
 check(secondList.find(f => f.slot === 3).used === false && secondList.find(f => f.slot === 5).used === false,
       'slots 4 and 6 empty after the clears');
 check(firstList.find(f => f.slot === P.CURRENT).used === true, 'the sound being edited is in the list');

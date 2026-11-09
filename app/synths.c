@@ -72,7 +72,16 @@ COLD void syn_set(const syn_info_t *sy, float *p, uint32_t k, float v)
     v = syn_clamp(v, d->min, d->max);
     if (d->round || d->choices)
         v = fm_floorf(v + 0.5f);                 /* Math.round */
+    if (is_key(sy->type, "Jinglr") && is_key(d->key, "seed"))
+        v = fm_floorf(v * 99999.0f + 0.5f) / 99999.0f;   /* (a melody's code, 0 .. 99999) */
     p[k] = v;
+}
+
+static COLD void jinglr_new_voice(const syn_info_t *sy, float *p, syn_rng_t *rng)   /* generate_instrument */
+{
+    int k = syn_find(sy, "instrumentSeed");
+    if (k >= 0)
+        p[k] = (float)(((uint32_t)p[k] + 1u + (uint32_t)(syn_rnd(rng) * 99999.0f)) % 100000u);
 }
 
 COLD void syn_defaults(const syn_info_t *sy, float *p)
@@ -101,7 +110,9 @@ COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
     }
     for (uint32_t k = 0; k < sy->np; k++)        /* a new variation */
         if (is_key(sy->p[k].key, "seed"))
-            p[k] = syn_rnd(rng);
+            syn_set(sy, p, k, syn_rnd(rng));
+    if (is_key(sy->type, "Jinglr"))              /* after_recipe: a new character for the instrument */
+        jinglr_new_voice(sy, p, rng);
 }
 
 COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
@@ -137,6 +148,14 @@ COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
 
 COLD void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
+    if (is_key(sy->type, "Jinglr")) {            /* a mutation gets a new melody code nearby */
+        int k = syn_find(sy, "seed");
+        if (k >= 0) {
+            uint32_t step = 1u + (uint32_t)(syn_rnd(rng) * 4999.0f), code = (uint32_t)fm_floorf(p[k] * 99999.0f + 0.5f);
+            uint32_t c2 = syn_rnd(rng) < 0.5f ? (code + 100000u - step) % 100000u : (code + step) % 100000u;
+            p[k] = (float)c2 / 99999.0f;
+        }
+    }
     for (uint32_t k = 0; k < sy->np; k++) {
         const syn_param_t *d = &sy->p[k];
         if (syn_rnd(rng) < 0.5f || locked(sy, k) || d->choices)
@@ -3342,6 +3361,266 @@ static void glitchr_run(void *st, float *out, uint32_t n)
     }
 }
 
+/* SoundDSP.rng(n / d), n < d: floor(n / d * 4294967295) worked out in whole numbers (bfxr2: in double) */
+static COLD void syn_rng_seed_frac(syn_rng_t *r, uint32_t n, uint32_t d)
+{
+    uint32_t q = 0, rem = n;
+    for (int b = 0; b < 32; b++) {               /* q = n 2^32 / d, rem its remainder (d below 2^31) */
+        rem <<= 1;
+        q <<= 1;
+        if (rem >= d) {
+            rem -= d;
+            q |= 1u;
+        }
+    }
+    r->s = q - (rem < n ? 1u : 0u);              /* (n 2^32 - n) / d */
+}
+
+/* ---- Jinglr: a small score from the Variation, played by an instrument of a seeded character ---- */
+#define JI_NOTES 12
+#define JI_PART 20
+typedef struct {
+    syn_rng_t rng;                       /* its breath */
+    uint32_t start, len;
+    float gate, strength, start_phase, attack_len, breath, breath_fall, filter, filtered, fund, fm_index, fm_amount, fm_gain;
+    float fm_fall, fm_gain_fall;
+    uint8_t np;
+    float step[JI_PART], gain[JI_PART], fall[JI_PART], offset[JI_PART];
+} jinglr_note_t;
+typedef struct {
+    uint32_t i, length, instrument, nn;
+    float tail, mod_ratio;
+    jinglr_note_t nt[JI_NOTES];
+} jinglr_t;
+
+typedef struct { int8_t degree; uint8_t rest; float beats; } jinglr_step_t;
+
+static COLD uint32_t jinglr_phrase(const float *p, jinglr_step_t *out)   /* compose_phrase: the melody from its code */
+{
+    static const float RH[4][4] = {{0.5f}, {0.75f, 0.25f}, {0.25f, 0.5f, 0.25f, 0.75f}, {1, 0.5f, 1, 1.5f}};
+    static const uint8_t RHN[4] = {1, 2, 4, 4};
+    syn_rng_t r;
+    uint32_t code = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_seed], 0, 1) * 99999.0f + 0.5f);
+    uint32_t count = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_noteCount], 2, 12) + 0.5f);
+    uint32_t contour = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_contour], 0, 4) + 0.5f);
+    uint32_t rhythm = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_rhythm], 0, 3) + 0.5f);
+    int32_t span, offset, wander;
+    syn_rng_seed_frac(&r, code, 99999u);
+    if (code >= 99999u)
+        r.s = 0xFFFFFFFFu;
+    span = 4 + (int32_t)(syn_rnd(&r) * 5.0f);
+    offset = (int32_t)(syn_rnd(&r) * 3.0f) - 1;
+    wander = offset;
+    for (uint32_t k = 0; k < count; k++) {
+        float position = (float)k / (float)(count > 1u ? count - 1u : 1u), beats;
+        int32_t jitter = 0, degree;
+        if (k != 0 && k != count - 1u)
+            jitter = (int32_t)(syn_rnd(&r) * 3.0f) - 1;
+        switch (contour) {
+        case 1: degree = offset + (int32_t)fm_floorf((float)span * (1.0f - position) + 0.5f) + jitter; break;
+        case 2: {
+            float v = (float)span * fm_sinf(position * PI), f = fm_floorf(v);
+            /* (a sine of 1/2: bfxr2's double comes out a hair under, and rounds down) */
+            degree = offset + (int32_t)(fm_fabsf(v - f - 0.5f) < 1e-5f ? f : fm_floorf(v + 0.5f)) + jitter;
+            break;
+        }
+        case 3: wander += (int32_t)(syn_rnd(&r) * 5.0f) - 2; degree = wander; break;
+        case 4: degree = offset + (k % 2u ? 3 + (int32_t)(syn_rnd(&r) * 3.0f) : 0); break;
+        default: degree = offset + (int32_t)fm_floorf((float)span * position + 0.5f) + jitter;
+        }
+        beats = RH[rhythm][k % RHN[rhythm]];
+        if (k == count - 1u)
+            beats = rhythm == 3 ? 2.0f : 1.0f;
+        out[k].rest = rhythm == 2 && k > 0 && k < count - 1u && syn_rnd(&r) < 0.18f;
+        out[k].degree = (int8_t)(degree < -7 ? -7 : degree > 14 ? 14 : degree);
+        out[k].beats = fm_floorf(syn_clamp(beats, 0.25f, 2.0f) * 4.0f + 0.5f) / 4.0f;
+    }
+    return count;
+}
+
+static float jinglr_beat(const float *p) { return 60.0f / syn_clamp(p[JINGLR_tempo], 60, 220); }
+
+static COLD uint32_t jinglr_begin(void *st, const float *p)
+{
+    static const uint8_t SCALES[4][7] = {{0, 2, 4, 5, 7, 9, 11}, {0, 2, 3, 5, 7, 8, 10}, {0, 2, 4, 7, 9}, {0, 2, 3, 5, 7, 9, 10}};
+    static const uint8_t SCALE_N[4] = {7, 7, 5, 7};
+    static const float ATTACK[8][2] = {{0.001f, 0.012f}, {0.001f, 0.006f}, {0.001f, 0.009f}, {0.006f, 0.04f},
+                                       {0.001f, 0.012f}, {0.012f, 0.06f}, {0.001f, 0.015f}, {0.025f, 0.12f}};
+    jinglr_t *j = st;
+    jinglr_step_t ph[JI_NOTES];
+    syn_rng_t vr, rng;
+    uint32_t count = jinglr_phrase(p, ph), scale, octave, key, iseed, instr;
+    float beat = jinglr_beat(p), swing = syn_clamp(p[JINGLR_swing], 0, 0.6f), cursor = 0, brightness, decay, echo;
+    float attack, release, damping, slope, color, hollow, filt, body, modulation, spread, pick, total, starts[JI_NOTES], durs[JI_NOTES];
+    brightness = syn_clamp(p[JINGLR_brightness], 0, 1);
+    decay = syn_clamp(p[JINGLR_decay], 0, 1);
+    echo = syn_clamp(p[JINGLR_echo], 0, 0.8f);
+    scale = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_scale], 0, 3) + 0.5f);
+    octave = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_octave], 3, 6) + 0.5f);
+    key = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_key], 0, 11) + 0.5f);
+    j->instrument = instr = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_instrument], 0, 7) + 0.5f);
+    iseed = (uint32_t)fm_floorf(syn_clamp(p[JINGLR_instrumentSeed], 0, 99999) + 0.5f);
+    syn_rng_seed_frac(&vr, instr * 100000u + iseed + 1u, 800001u);   /* the instrument's character */
+    attack = ATTACK[instr][0] + syn_rnd(&vr) * (ATTACK[instr][1] - ATTACK[instr][0]);
+    release = 0.6f + syn_rnd(&vr) * 0.85f;
+    damping = 0.45f + syn_rnd(&vr) * 1.9f;
+    slope = 0.65f + syn_rnd(&vr) * 1.5f;
+    color = 0.2f + syn_rnd(&vr) * 0.75f;
+    hollow = syn_rnd(&vr);
+    filt = 1.5f + syn_rnd(&vr) * 9.0f;
+    body = 0.65f + syn_rnd(&vr) * 0.35f;
+    modulation = 0.3f + syn_rnd(&vr) * 3.5f;
+    j->mod_ratio = 1.0f + fm_floorf(syn_rnd(&vr) * 4.0f);
+    spread = 0.001f + syn_rnd(&vr) * 0.005f;
+    pick = 0.08f + syn_rnd(&vr) * 0.4f;
+    for (uint32_t k = 0; k < count; k++) {       /* the schedule: swing shares out each pair's time */
+        uint32_t pair = k / 2u * 2u;
+        float shift = pair + 1u < count ? fm_minf(ph[pair].beats, ph[pair + 1u].beats) * swing : 0.0f;
+        durs[k] = (ph[k].beats + (k % 2u ? -shift : shift)) * beat;
+        starts[k] = cursor;
+        cursor += durs[k];
+    }
+    j->tail = (0.035f + decay * 0.26f) * release;
+    total = cursor + j->tail + (echo > 0 ? beat * 0.75f * 3.0f : 0.0f);
+    j->length = ceil_u(total * RATE);
+    syn_rng_seed_frac(&rng, (iseed * 7u + instr * 100003u + 1u) % 1000003u, 1000003u);   /* timbre, attacks, breath */
+    j->nn = 0;
+    for (uint32_t k = 0; k < count; k++) {
+        jinglr_note_t *n = &j->nt[j->nn];
+        int32_t deg = ph[k].degree, sn = SCALE_N[scale], idx, midi;
+        float f, cutoff;
+        uint32_t np = 0;
+        if (ph[k].rest)
+            continue;
+        idx = (deg % sn + sn) % sn;
+        midi = (int32_t)(octave + 1u) * 12 + (int32_t)key + (deg >= 0 ? deg / sn : -((-deg + sn - 1) / sn)) * 12 + SCALES[scale][idx];
+        f = 440.0f * fm_exp2f((float)(midi - 69) / 12.0f);
+        n->start = (uint32_t)fm_floorf(starts[k] * RATE + 0.5f);
+        n->gate = durs[k] * (0.52f + 0.38f * decay) * body;
+        n->len = ceil_u((n->gate + j->tail) * RATE);
+        n->strength = 0.84f + syn_rnd(&rng) * 0.16f;
+        n->start_phase = syn_rnd(&rng) * TAU;   /* (drawn for every instrument; the chip's pulse starts at 0) */
+        if (instr == 2)
+            n->start_phase = 0;
+#define PART(ratio, g, fo, off) do { if (f * (ratio) < RATE * 0.45f && np < JI_PART) { n->step[np] = f * (ratio) / RATE; \
+        n->gain[np] = (g); n->fall[np] = fm_expf(-(fo) * damping / RATE); n->offset[np] = (off); np++; } } while (0)
+        if (instr == 0)                          /* a plucked string: bright overtones die first */
+            for (uint32_t h = 1; h <= 10; h++) {
+                float pk = h == 1 ? 1.0f : 0.25f + 0.75f * fm_fabsf(fm_sinf(PI * (float)h * pick));
+                PART((float)h, pk * fm_powf(0.12f + brightness * 0.85f, (float)(h - 1u)) / fm_powf((float)h, slope),
+                     (1.5f + (1.0f - decay) * 7.0f) * fm_sqrtf((float)h), 0.0f);
+            }
+        else if (instr == 1) {
+            float rs[4] = {1, 2.0f + color * 1.1f, 3.8f + hollow * 2.3f, 7.5f + color * 2.5f};
+            for (uint32_t h = 0; h < 4; h++)
+                PART(rs[h], h == 0 ? 0.8f : (0.1f + brightness * 0.85f) / fm_powf((float)(h + 1u), slope),
+                     (0.7f + (1.0f - decay) * 5.0f) * (1.0f + (float)h * 0.6f), 0.0f);
+        } else if (instr == 2) {                 /* a pulse of varying duty, as band-limited harmonics */
+            float duty = 0.12f + hollow * 0.38f;
+            for (uint32_t h = 1; h <= 16; h++)
+                PART((float)h, 0.8f * fm_sinf(PI * (float)h * duty) / fm_sinf(PI * duty) *
+                                   fm_powf(0.3f + brightness * 0.7f, (float)(h - 1u)) / fm_powf((float)h, slope),
+                     0.45f + (1.0f - decay) * 2.0f, 0.0f);
+        } else if (instr == 3) {
+            PART(1.0f, 0.8f, 0.35f + (1.0f - decay) * 1.5f, 0.0f);
+            for (uint32_t h = 2; h <= 5; h++)
+                PART((float)h, brightness * color * 0.5f / fm_powf((float)(h - 1u), slope),
+                     (0.35f + (1.0f - decay) * 1.5f) * (1.0f + (float)h * 0.15f), 0.0f);
+        } else if (instr == 4) {                 /* hammered keys: a warm body, short ringing tines */
+            for (uint32_t h = 1; h <= 8; h++)
+                PART((float)h, (h == 1 ? 0.85f : (0.2f + brightness * 0.7f) * (h % 2u ? 0.55f : 1.0f)) / fm_powf((float)h, slope),
+                     (0.8f + (1.0f - decay) * 4.0f) * (1.0f + (float)h * 0.3f), 0.0f);
+            PART(4.0f + color * 0.04f, brightness * hollow * 0.35f, 12.0f + (1.0f - decay) * 12.0f, 0.0f);
+        } else if (instr == 5) {                 /* a reed: hollow odd partials to a nasal full spectrum */
+            for (uint32_t h = 1; h <= 12; h++) {
+                float x = ((float)h - (2.0f + hollow * 4.0f)) / 2.0f;
+                float res = 1.0f + color * fm_expf(-x * x) * 2.0f, even = h % 2u ? 1.0f : 0.1f + hollow * 0.85f;
+                PART((float)h, 0.65f * res * even * fm_powf(0.35f + brightness * 0.65f, (float)(h - 1u)) / fm_powf((float)h, slope),
+                     0.2f + (1.0f - decay) * 0.8f, 0.0f);
+            }
+        } else if (instr == 6)
+            PART(1.0f, 0.28f, 0.5f + (1.0f - decay) * 3.0f, 0.0f);
+        else                                     /* strings: detuned pairs, the centre pitch held */
+            for (uint32_t h = 1; h <= 10; h++) {
+                float g = 0.32f * fm_powf(0.5f + brightness * 0.48f, (float)(h - 1u)) / fm_powf((float)h, slope);
+                PART((float)h * (1.0f - spread), g, 0.15f + (1.0f - decay) * 0.6f, 0.0f);
+                PART((float)h * (1.0f + spread), g, 0.15f + (1.0f - decay) * 0.6f, color * 2.0f);
+            }
+#undef PART
+        n->np = (uint8_t)np;
+        n->attack_len = fm_minf(attack, n->gate * 0.65f) * RATE;
+        n->breath = 0.005f * brightness * (0.3f + hollow);
+        n->breath_fall = fm_expf(-(0.5f + (1.0f - decay) * 2.0f) * damping / RATE);
+        cutoff = fm_minf(RATE * 0.44f, f * (filt + brightness * 9.0f));
+        n->filter = 1.0f - fm_expf(-TAU * cutoff / RATE);
+        n->filtered = 0;
+        n->fund = f / RATE;                      /* in turns */
+        n->fm_index = fm_minf(modulation * (0.15f + brightness), fm_maxf(0.0f, (RATE * 0.4f / f - 1.0f) / j->mod_ratio));
+        n->fm_amount = n->fm_index;
+        n->fm_gain = 0.62f;
+        n->fm_fall = fm_expf(-(2.0f + (1.0f - decay) * 8.0f) * damping / RATE);
+        n->fm_gain_fall = fm_expf(-(0.6f + (1.0f - decay) * 3.0f) * damping / RATE);
+        n->rng = rng;
+        if (instr == 3 || instr == 5)
+            rng_skip(&rng, n->start < j->length ? (n->len < j->length - n->start ? n->len : j->length - n->start) : 0u);
+        j->nn++;
+    }
+    j->i = 0;
+    return j->length;
+}
+
+static void jinglr_whole(const float *p, uint32_t len, syn_whole_t *w)   /* three soft musical repeats */
+{
+    float echo = syn_clamp(p[JINGLR_echo], 0, 0.8f), delay = jinglr_beat(p) * 0.75f, g = 1;
+    (void)len;
+    if (!(echo > 0))
+        return;
+    w->necho = 3;
+    for (uint32_t r = 0; r < 3; r++) {
+        g *= echo * 0.58f;
+        w->echo_off[r] = (uint32_t)fm_floorf(delay * (float)(r + 1u) * RATE + 0.5f);
+        w->echo_gain[r] = g;
+    }
+}
+
+static void jinglr_run(void *st, float *out, uint32_t n)
+{
+    jinglr_t *j = st;
+    for (uint32_t k = 0; k < n; k++)
+        out[k] = 0;
+    for (uint32_t ni = 0; ni < j->nn; ni++) {
+        jinglr_note_t *t = &j->nt[ni];
+        uint32_t a = j->i > t->start ? j->i : t->start, end = t->start + t->len;
+        if (end > j->length)
+            end = j->length;
+        for (uint32_t i = a; i < j->i + n && i < end; i++) {
+            uint32_t q = i - t->start;
+            float time = (float)q / RATE, attack = (float)q < t->attack_len ? (float)q / t->attack_len : 1.0f;
+            float release = time > t->gate ? 1.0f - (time - t->gate) / j->tail : 1.0f, sample = 0;
+            ff_t fq = {(float)q, 0};
+            for (uint32_t h = 0; h < t->np; h++) {
+                sample += fm_sin_turns(ff_frac_mul(&fq, t->step[h]) + (t->start_phase + t->offset[h]) * ITAU) * t->gain[h];
+                t->gain[h] = fm_flush(t->gain[h] * t->fall[h]);
+            }
+            if (j->instrument == 3 || j->instrument == 5) {
+                sample += (syn_rnd(&t->rng) * 2.0f - 1.0f) * t->breath;
+                t->breath *= t->breath_fall;
+            }
+            if (j->instrument == 6) {
+                float x = ff_frac_mul(&fq, t->fund);
+                sample += fm_sin_turns(x + t->start_phase * ITAU +
+                                       (t->fm_index * 0.18f + t->fm_amount) * fm_sin_turns(ff_frac_mul(&fq, t->fund * j->mod_ratio)) * ITAU) *
+                          t->fm_gain;
+                t->fm_amount *= t->fm_fall;
+                t->fm_gain *= t->fm_gain_fall;
+            }
+            t->filtered += (sample - t->filtered) * t->filter;
+            out[i - j->i] += t->filtered * attack * release * t->strength;
+        }
+    }
+    j->i += n;
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -3361,6 +3640,7 @@ const syn_engine_t SYN_ENGINES[] = {
     {fractr_begin, fractr_run},
     {riftr_begin, riftr_run, riftr_whole},
     {glitchr_begin, glitchr_run},
+    {jinglr_begin, jinglr_run, jinglr_whole},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
@@ -3371,4 +3651,5 @@ _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_S
                sizeof(pluckr_t) <= SYN_STATE_BYTES && sizeof(rustlr_t) <= SYN_STATE_BYTES &&
                sizeof(squishr_t) <= SYN_STATE_BYTES && sizeof(clonkr_t) <= SYN_STATE_BYTES &&
                sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES &&
-               sizeof(riftr_t) <= SYN_STATE_BYTES && sizeof(glitchr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(riftr_t) <= SYN_STATE_BYTES && sizeof(glitchr_t) <= SYN_STATE_BYTES &&
+               sizeof(jinglr_t) <= SYN_STATE_BYTES, "synth state");

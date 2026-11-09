@@ -673,8 +673,88 @@ static const syn_recipe_t GLITCHR_RECIPES[8] = {
     {"GRANULAR TEAR", GLITCHR_R7, 9},
 };
 
+enum { JINGLR_masterVolume, JINGLR_seed, JINGLR_instrumentSeed, JINGLR_instrument, JINGLR_key, JINGLR_scale, JINGLR_contour, JINGLR_rhythm, JINGLR_noteCount, JINGLR_octave, JINGLR_tempo, JINGLR_swing, JINGLR_brightness, JINGLR_decay, JINGLR_echo, JINGLR_NP };
+static const syn_param_t JINGLR_P[15] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5000050000500005f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"instrumentSeed", "INSTRUMENT SEED", 42731.0f, 0.0f, 99999.0f, 0, 1, 0, 0},
+    {"instrument", "INSTRUMENT", 0.0f, 0.0f, 7.0f, "PLUCK|BELL|CHIP|FLUTE|KEYS|REED|FM|STRINGS", 0, 0, 0},
+    {"key", "KEY", 0.0f, 0.0f, 11.0f, "C|C#|D|D#|E|F|F#|G|G#|A|A#|B", 0, 0, 0},
+    {"scale", "SCALE", 0.0f, 0.0f, 3.0f, "MAJOR|MINOR|PENTATONIC|DORIAN", 0, 0, 0},
+    {"contour", "CONTOUR", 0.0f, 0.0f, 4.0f, "RISE|FALL|ARCH|WANDER|CALL", 0, 0, 0},
+    {"rhythm", "RHYTHM", 0.0f, 0.0f, 3.0f, "EVEN|DOTTED|SKIPPING|HELD", 0, 0, 0},
+    {"noteCount", "NOTES", 4.0f, 2.0f, 12.0f, 0, 1, 0, 0},
+    {"octave", "OCTAVE", 4.0f, 3.0f, 6.0f, 0, 1, 0, 0},
+    {"tempo", "TEMPO", 140.0f, 60.0f, 220.0f, 0, 0, 0, 0},
+    {"swing", "SWING", 0.0f, 0.0f, 0.6f, 0, 0, 0, 0},
+    {"brightness", "BRIGHTNESS", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"decay", "DECAY", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"echo", "ECHO", 0.12f, 0.0f, 0.8f, 0, 0, 0, 0},
+};
+static const float JINGLR_R0_instrument[4] = {0.0f, 1.0f, 4.0f, 6.0f};
+static const syn_rv_t JINGLR_R0[10] = {{JINGLR_instrument, SYN_RV_PICK, 4, 0, 0, JINGLR_R0_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_contour, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 200.0f, 220.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.04f, 0.2f, 0}, {JINGLR_echo, SYN_RV_FIXED, 0, 0.0f, 0, 0}};
+static const float JINGLR_R1_instrument[4] = {0.0f, 1.0f, 3.0f, 4.0f};
+static const float JINGLR_R1_contour[2] = {0.0f, 4.0f};
+static const syn_rv_t JINGLR_R1[10] = {{JINGLR_instrument, SYN_RV_PICK, 4, 0, 0, JINGLR_R1_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_contour, SYN_RV_PICK, 2, 0, 0, JINGLR_R1_contour}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 180.0f, 220.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.15f, 0.55f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.06f, 0.24f, 0}, {JINGLR_echo, SYN_RV_FIXED, 0, 0.0f, 0, 0}};
+static const float JINGLR_R2_instrument[3] = {0.0f, 2.0f, 4.0f};
+static const float JINGLR_R2_scale[2] = {0.0f, 2.0f};
+static const syn_rv_t JINGLR_R2[10] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R2_instrument}, {JINGLR_scale, SYN_RV_PICK, 2, 0, 0, JINGLR_R2_scale}, {JINGLR_contour, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 195.0f, 220.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 3.0f, 4.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.15f, 0.6f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.02f, 0.14f, 0}, {JINGLR_echo, SYN_RV_FIXED, 0, 0.0f, 0, 0}};
+static const float JINGLR_R3_instrument[3] = {2.0f, 5.0f, 6.0f};
+static const syn_rv_t JINGLR_R3[10] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R3_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_contour, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 200.0f, 220.0f, 0}, {JINGLR_octave, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.01f, 0.12f, 0}, {JINGLR_echo, SYN_RV_FIXED, 0, 0.0f, 0, 0}};
+static const float JINGLR_R4_instrument[3] = {0.0f, 1.0f, 4.0f};
+static const float JINGLR_R4_scale[2] = {0.0f, 2.0f};
+static const float JINGLR_R4_key[5] = {0.0f, 2.0f, 5.0f, 7.0f, 9.0f};
+static const float JINGLR_R4_rhythm[2] = {0.0f, 1.0f};
+static const syn_rv_t JINGLR_R4[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R4_instrument}, {JINGLR_scale, SYN_RV_PICK, 2, 0, 0, JINGLR_R4_scale}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R4_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R4_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 4.0f, 7.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 130.0f, 185.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}};
+static const float JINGLR_R5_instrument[3] = {1.0f, 2.0f, 5.0f};
+static const float JINGLR_R5_key[5] = {0.0f, 2.0f, 4.0f, 5.0f, 7.0f};
+static const float JINGLR_R5_rhythm[2] = {0.0f, 1.0f};
+static const syn_rv_t JINGLR_R5[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R5_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R5_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R5_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 5.0f, 9.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 155.0f, 215.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.35f, 0.6f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}};
+static const float JINGLR_R6_instrument[3] = {0.0f, 2.0f, 7.0f};
+static const float JINGLR_R6_key[5] = {0.0f, 2.0f, 5.0f, 7.0f, 9.0f};
+static const float JINGLR_R6_rhythm[2] = {0.0f, 3.0f};
+static const syn_rv_t JINGLR_R6[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R6_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R6_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R6_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 3.0f, 5.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 80.0f, 120.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 3.0f, 4.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const float JINGLR_R7_instrument[2] = {1.0f, 6.0f};
+static const float JINGLR_R7_scale[2] = {1.0f, 3.0f};
+static const float JINGLR_R7_key[5] = {1.0f, 3.0f, 6.0f, 8.0f, 10.0f};
+static const float JINGLR_R7_contour[2] = {2.0f, 3.0f};
+static const float JINGLR_R7_rhythm[2] = {1.0f, 2.0f};
+static const syn_rv_t JINGLR_R7[11] = {{JINGLR_instrument, SYN_RV_PICK, 2, 0, 0, JINGLR_R7_instrument}, {JINGLR_scale, SYN_RV_PICK, 2, 0, 0, JINGLR_R7_scale}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R7_key}, {JINGLR_contour, SYN_RV_PICK, 2, 0, 0, JINGLR_R7_contour}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R7_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 4.0f, 7.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 95.0f, 145.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.3f, 0.55f, 0}};
+static const float JINGLR_R8_instrument[2] = {2.0f, 5.0f};
+static const float JINGLR_R8_key[5] = {0.0f, 1.0f, 3.0f, 6.0f, 8.0f};
+static const float JINGLR_R8_rhythm[2] = {0.0f, 2.0f};
+static const syn_rv_t JINGLR_R8[11] = {{JINGLR_instrument, SYN_RV_PICK, 2, 0, 0, JINGLR_R8_instrument}, {JINGLR_scale, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R8_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R8_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 4.0f, 8.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 160.0f, 220.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}};
+static const float JINGLR_R9_instrument[3] = {0.0f, 3.0f, 4.0f};
+static const float JINGLR_R9_scale[2] = {0.0f, 2.0f};
+static const float JINGLR_R9_key[5] = {0.0f, 2.0f, 5.0f, 7.0f, 9.0f};
+static const syn_rv_t JINGLR_R9[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R9_instrument}, {JINGLR_scale, SYN_RV_PICK, 2, 0, 0, JINGLR_R9_scale}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R9_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 3.0f, 5.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 120.0f, 160.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}};
+static const float JINGLR_R10_instrument[3] = {0.0f, 1.0f, 6.0f};
+static const float JINGLR_R10_scale[2] = {0.0f, 2.0f};
+static const float JINGLR_R10_key[6] = {0.0f, 2.0f, 4.0f, 5.0f, 7.0f, 9.0f};
+static const float JINGLR_R10_rhythm[2] = {1.0f, 2.0f};
+static const syn_rv_t JINGLR_R10[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R10_instrument}, {JINGLR_scale, SYN_RV_PICK, 2, 0, 0, JINGLR_R10_scale}, {JINGLR_key, SYN_RV_PICK, 6, 0, 0, JINGLR_R10_key}, {JINGLR_contour, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {JINGLR_rhythm, SYN_RV_PICK, 2, 0, 0, JINGLR_R10_rhythm}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 6.0f, 10.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 115.0f, 165.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.45f, 0.7f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.18f, 0.35f, 0}};
+static const float JINGLR_R11_instrument[3] = {0.0f, 3.0f, 7.0f};
+static const float JINGLR_R11_scale[3] = {0.0f, 2.0f, 3.0f};
+static const float JINGLR_R11_key[5] = {0.0f, 2.0f, 5.0f, 7.0f, 9.0f};
+static const float JINGLR_R11_contour[2] = {2.0f, 3.0f};
+static const syn_rv_t JINGLR_R11[11] = {{JINGLR_instrument, SYN_RV_PICK, 3, 0, 0, JINGLR_R11_instrument}, {JINGLR_scale, SYN_RV_PICK, 3, 0, 0, JINGLR_R11_scale}, {JINGLR_key, SYN_RV_PICK, 5, 0, 0, JINGLR_R11_key}, {JINGLR_contour, SYN_RV_PICK, 2, 0, 0, JINGLR_R11_contour}, {JINGLR_rhythm, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {JINGLR_noteCount, SYN_RV_RANGE, 0, 4.0f, 7.0f, 0}, {JINGLR_tempo, SYN_RV_RANGE, 0, 65.0f, 100.0f, 0}, {JINGLR_octave, SYN_RV_RANGE, 0, 4.0f, 5.0f, 0}, {JINGLR_brightness, SYN_RV_RANGE, 0, 0.05f, 0.35f, 0}, {JINGLR_decay, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {JINGLR_echo, SYN_RV_RANGE, 0, 0.12f, 0.3f, 0}};
+static const syn_recipe_t JINGLR_RECIPES[12] = {
+    {"CONFIRM", JINGLR_R0, 10},
+    {"MESSAGE", JINGLR_R1, 10},
+    {"DISMISS", JINGLR_R2, 10},
+    {"DENIED", JINGLR_R3, 10},
+    {"DISCOVERY", JINGLR_R4, 11},
+    {"VICTORY", JINGLR_R5, 11},
+    {"FAILURE", JINGLR_R6, 11},
+    {"SECRET", JINGLR_R7, 11},
+    {"WARNING", JINGLR_R8, 11},
+    {"CHECKPOINT", JINGLR_R9, 11},
+    {"PUZZLE SOLVED", JINGLR_R10, 11},
+    {"LULLABY", JINGLR_R11, 11},
+};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 18u
+#define SYN_NPRESET 19u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES, 0},
@@ -695,4 +775,5 @@ const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"FRACTR", "Fractr", 13, FRACTR_P, 10, FRACTR_RECIPES, 1},
     {"RIFTR", "Riftr", 12, RIFTR_P, 8, RIFTR_RECIPES, 0},
     {"GLITCHR", "Glitchr", 11, GLITCHR_P, 8, GLITCHR_RECIPES, 0},
+    {"JINGLR", "Jinglr", 15, JINGLR_P, 12, JINGLR_RECIPES, 0},
 };
