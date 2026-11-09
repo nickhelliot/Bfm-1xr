@@ -16,8 +16,11 @@ globalThis.window = globalThis;
 const src = fs.readFileSync(path.join(bfxrDir, 'lib', 'bfxrlib.js'), 'utf8');
 const at = src.indexOf('\n', src.indexOf('const BFXR_SYNTHS = {'));   // (the library keeps its synths to itself)
 if (at < 0) { console.error('bfxrlib.js: BFXR_SYNTHS not found'); process.exit(2); }
+const end = src.lastIndexOf('})(globalThis)');   // (Footsteppr's Pure Data patches, compiled: at the library's end)
 (0, eval)(src.slice(0, at) + '\nglobalThis.__BFXR_SYNTHS = BFXR_SYNTHS;' +
-  '\nglobalThis.__FAMILIES = typeof TRANSFXR_PRESET_FAMILIES === "undefined" ? [] : TRANSFXR_PRESET_FAMILIES;' + src.slice(at));
+  '\nglobalThis.__FAMILIES = typeof TRANSFXR_PRESET_FAMILIES === "undefined" ? [] : TRANSFXR_PRESET_FAMILIES;' +
+  src.slice(at, end) + '\nglobalThis.__PD = typeof puredata_functions === "undefined" ? null : puredata_functions;\n' +
+  src.slice(end));
 const bfxr = globalThis.bfxr, SYNTHS = globalThis.__BFXR_SYNTHS;
 
 for (const name of bfxr.synths()) {
@@ -50,6 +53,9 @@ for (const name of bfxr.synths()) {
     (r.choices ? `\tselect:${r.choices.join('|')}\tvalues:${r.values.join(',')}` : '')).join('\n') + '\n');
   fs.writeFileSync(path.join(dir, 'recipes.json'), JSON.stringify(engine.recipes || [], null, 1));
   fs.writeFileSync(path.join(dir, 'version.txt'), String(engine.version || '') + '\n');   // (a .bfxr file's "version")
+  if (name === 'Footsteppr' && globalThis.__PD)   // its terrains: bfxr2's Pd patches, as the library compiles them
+    fs.writeFileSync(path.join(dir, 'pd.json'), JSON.stringify(Object.fromEntries(
+      Object.entries(globalThis.__PD).map(([k, f]) => [k, f.toString()]))));
   if (name === 'Transfxr') {                     // its buttons: bfxr2's preset families (PresetFamily.sample)
     const curves = engine.param_info.find(r => r.type === 'KNOB_TRANSITION').curves;
     fs.writeFileSync(path.join(dir, 'families.json'), JSON.stringify({curves, families: globalThis.__FAMILIES}));
@@ -62,6 +68,7 @@ for (const name of bfxr.synths()) {
         if (typeof s.params[k] === 'number') s.params[k] = Math.fround(s.params[k]);
         else if (s.params[k] && typeof s.params[k].start === 'number')   // (a transition's ends too)
           s.params[k] = {...s.params[k], start: Math.fround(s.params[k].start), end: Math.fround(s.params[k].end)};
+      if (name === 'Footsteppr') s.renderSeed = 0.5;   // (its noise: the FM-1's, as a Library sound's)
       let pcm;
       try { pcm = bfxr.render(s); } catch (e) { console.error(name, id, e.message); continue; }
       const vals = rows.map(r => r.get ? r.get(s.params[r.key.replace(/_(start|end|curve)$/, '')]) : s.params[r.key]);

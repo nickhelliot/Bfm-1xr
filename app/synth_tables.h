@@ -838,8 +838,28 @@ static const syn_recipe_t TRANSFXR_RECIPES[16] = {
     {"TIMBRAL MORPH", TRANSFXR_R15, 0},
 };
 
+enum { FOOTSTEPPR_masterVolume, FOOTSTEPPR_terrain, FOOTSTEPPR_heel, FOOTSTEPPR_roll, FOOTSTEPPR_ball, FOOTSTEPPR_swiftness, FOOTSTEPPR_NP };
+static const syn_param_t FOOTSTEPPR_P[6] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"terrain", "TERRAIN", 0.0f, 0.0f, 4.0f, "SNOW|GRASS|DIRT|GRAVEL|WOOD", 0, 0, 0},
+    {"heel", "HEEL", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"roll", "ROLL", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"ball", "BALL", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"swiftness", "SWIFTNESS", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+};
+static const syn_recipe_t FOOTSTEPPR_RECIPES[1] = {
+    {"", 0, 0},
+};
+enum { FP_ENV, FP_COPY, FP_NOISE, FP_MUL, FP_DIV, FP_ADD, FP_CLIP, FP_OSC, FP_LOP, FP_HIP, FP_VCF, FP_BP, FP_SQRT };
+typedef struct { uint8_t op; int16_t dst, a, b, c; } fp_op_t;
+#define FP_NODES 202u
+#define FP_NOPS 121u
+static const float FP_CONST[51] = {9000.0f, 700.0f, 10.0f, 17.0f, 0.5f, 70.0f, 50.0f, 900.0f, 110.0f, -1.0f, 1.0f, 300.0f, 0.2f, 16.0f, 23800.0f, 3400.0f, 2000.0f, 10000.0f, 2500.0f, 1e-05f, -0.9f, 0.9f, 0.3f, 600.0f, 30.0f, 0.0f, 0.8f, 80.0f, 200.0f, 0.04f, 500.0f, 40.0f, 1000.0f, 50000.0f, 400.0f, 0.01f, 3.0f, 2.0f, 201.0f, 189.0f, 90.0f, 156.0f, 123.0f, 20.0f, 8.0f, 0.6f, 154.0f, 139.0f, 134.0f, 95.0f, 6.0f};
+static const fp_op_t FP_OPS[121] = {{FP_ENV, 29, 0, 0, 0}, {FP_MUL, 27, 29, -1, 0}, {FP_ADD, 26, 27, -2, 0}, {FP_NOISE, 25, 0, 0, 0}, {FP_LOP, 24, 25, -3, 0}, {FP_MUL, 23, 24, -4, 0}, {FP_MUL, 19, 23, 23, 0}, {FP_ADD, 18, 19, -5, 0}, {FP_LOP, 16, 25, -6, 0}, {FP_LOP, 14, 25, -7, 0}, {FP_DIV, 13, 14, 16, 0}, {FP_NOISE, 12, 0, 0, 0}, {FP_LOP, 11, 12, -8, 0}, {FP_LOP, 9, 12, -9, 0}, {FP_DIV, 8, 9, 11, 0}, {FP_MUL, 7, 8, 13, 0}, {FP_MUL, 6, 7, 18, 0}, {FP_CLIP, 5, 6, -10, -11}, {FP_HIP, 4, 5, -12, 0}, {FP_VCF, 3, 4, 26, -5}, {FP_MUL, 2, 3, 29, 0}, {FP_MUL, 1, 2, -13, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 60, 0, 0, 0}, {FP_LOP, 59, 60, -14, 0}, {FP_MUL, 58, 59, -15, 0}, {FP_ADD, 57, 58, -16, 0}, {FP_CLIP, 56, 57, -17, -18}, {FP_LOP, 54, 60, -17, 0}, {FP_LOP, 52, 60, -12, 0}, {FP_DIV, 51, 52, 54, 0}, {FP_HIP, 50, 51, -19, 0}, {FP_MUL, 43, 50, 50, 0}, {FP_MUL, 29, 43, 43, 0}, {FP_MUL, 28, 29, -20, 0}, {FP_CLIP, 27, 28, -21, -22}, {FP_VCF, 26, 27, 56, -11}, {FP_HIP, 25, 26, -8, 0}, {FP_MUL, 24, 25, -23, 0}, {FP_ENV, 23, 0, 0, 0}, {FP_MUL, 22, 23, 24, 0}, {FP_MUL, 19, 23, 23, 0}, {FP_MUL, 15, 19, 19, 0}, {FP_MUL, 7, 15, -24, 0}, {FP_ADD, 6, 7, -25, 0}, {FP_OSC, 5, 6, 0, 0}, {FP_CLIP, 4, 5, -26, -5}, {FP_MUL, 3, 4, 15, 0}, {FP_MUL, 2, 3, -27, 0}, {FP_ADD, 1, 2, 22, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 32, 0, 0, 0}, {FP_LOP, 31, 32, -28, 0}, {FP_MUL, 30, 31, -6, 0}, {FP_ENV, 29, 0, 0, 0}, {FP_ADD, 28, 29, -23, 0}, {FP_MUL, 27, 28, 30, 0}, {FP_MUL, 26, 27, -6, 0}, {FP_ADD, 25, 26, -6, 0}, {FP_OSC, 24, 25, 0, 0}, {FP_HIP, 23, 24, -29, 0}, {FP_CLIP, 22, 23, -10, -11}, {FP_MUL, 21, 22, -30, 0}, {FP_MUL, 18, 29, 29, 0}, {FP_MUL, 14, 18, 18, 0}, {FP_MUL, 6, 14, -31, 0}, {FP_ADD, 5, 6, -32, 0}, {FP_OSC, 4, 5, 0, 0}, {FP_MUL, 3, 4, 14, 0}, {FP_MUL, 2, 3, -5, 0}, {FP_ADD, 1, 2, 21, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_ENV, 27, 0, 0, 0}, {FP_MUL, 26, 27, -33, 0}, {FP_NOISE, 25, 0, 0, 0}, {FP_LOP, 24, 25, -7, 0}, {FP_MUL, 23, 24, -34, 0}, {FP_ADD, 22, 23, 26, 0}, {FP_CLIP, 21, 22, -31, -18}, {FP_LOP, 19, 25, -17, 0}, {FP_LOP, 17, 25, -12, 0}, {FP_DIV, 16, 17, 19, 0}, {FP_HIP, 15, 16, -35, 0}, {FP_MUL, 8, 15, 15, 0}, {FP_MUL, 7, 8, -36, 0}, {FP_CLIP, 6, 7, -21, -22}, {FP_VCF, 5, 6, 21, -37}, {FP_HIP, 4, 5, -29, 0}, {FP_MUL, 3, 4, -38, 0}, {FP_MUL, 1, 27, 3, 0}, {FP_COPY, 0, 1, 0, 0}, {FP_NOISE, 29, 0, 0, 0}, {FP_BP, 28, 29, -39, -6}, {FP_BP, 26, 29, -40, -41}, {FP_BP, 24, 29, -42, -41}, {FP_BP, 22, 29, -43, -44}, {FP_COPY, 200, 22, 0, 0}, {FP_ADD, 200, 200, 24, 0}, {FP_ADD, 200, 200, 26, 0}, {FP_ADD, 200, 200, 28, 0}, {FP_MUL, 21, 200, -45, 0}, {FP_ENV, 20, 0, 0, 0}, {FP_MUL, 18, 20, 20, 0}, {FP_MUL, 17, 18, -38, 0}, {FP_MUL, 16, 17, 21, 0}, {FP_MUL, 15, 16, -46, 0}, {FP_NOISE, 14, 0, 0, 0}, {FP_BP, 13, 14, -47, -41}, {FP_BP, 11, 14, -48, -41}, {FP_BP, 9, 14, -49, -41}, {FP_BP, 7, 14, -50, -41}, {FP_COPY, 201, 7, 0, 0}, {FP_ADD, 201, 201, 9, 0}, {FP_ADD, 201, 201, 11, 0}, {FP_ADD, 201, 201, 13, 0}, {FP_MUL, 6, 201, -51, 0}, {FP_SQRT, 4, 20, 0, 0}, {FP_MUL, 3, 4, 6, 0}, {FP_MUL, 2, 3, -5, 0}, {FP_ADD, 1, 2, 15, 0}, {FP_COPY, 0, 1, 0, 0}};
+static const uint16_t FP_START[6] = {0, 23, 51, 72, 91, 121};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 20u
+#define SYN_NPRESET 21u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES, 0},
@@ -862,4 +882,5 @@ const syn_info_t SYN_INFO[SYN_NPRESET] = {
     {"GLITCHR", "Glitchr", 11, GLITCHR_P, 8, GLITCHR_RECIPES, 0},
     {"JINGLR", "Jinglr", 15, JINGLR_P, 12, JINGLR_RECIPES, 0},
     {"TRANSFXR", "Transfxr", 23, TRANSFXR_P, 16, TRANSFXR_RECIPES, 3},
+    {"FOOTSTEPPR", "Footsteppr", 6, FOOTSTEPPR_P, 0, FOOTSTEPPR_RECIPES, 0},
 };

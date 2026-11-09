@@ -3935,6 +3935,154 @@ COLD void transfxr_randomized(const syn_info_t *sy, float *p, syn_rng_t *rng)   
     syn_set(sy, p, TRANSFXR_level_curve, 0);
 }
 
+/* ---- Footsteppr: Obiwannabe's footsteps, bfxr2's Pure Data patches run a sample at a time ---- */
+typedef struct { float a, b; syn_rng_t rng; uint8_t init; } fp_state_t;
+typedef struct {
+    uint32_t i, length, op0, op1;
+    float seconds, heel, roll, ball, vol;
+    float node[FP_NODES];
+    fp_state_t st[FP_NOPS];
+} footsteppr_t;
+
+static float fp_cos[2049];               /* Pd's cosine table */
+
+static COLD uint32_t footsteppr_begin(void *st, const float *p)
+{
+    footsteppr_t *f = st;
+    uint32_t terrain = (uint32_t)fm_floorf(syn_clamp(p[FOOTSTEPPR_terrain], 0, 4) + 0.5f);
+    if (fp_cos[0] != 1.0f) {
+        for (uint32_t k = 0; k < 2048; k++)
+            fp_cos[k] = fm_sin_turns((float)k / 2048.0f + 0.25f);
+        fp_cos[0] = fp_cos[2048] = 1;
+        fp_cos[512] = fp_cos[1536] = 0;
+        fp_cos[1024] = -1;
+    }
+    f->seconds = 0.1f + 0.7f * (1.0f - syn_clamp(p[FOOTSTEPPR_swiftness], 0, 1));
+    f->length = (uint32_t)(f->seconds * RATE);
+    f->heel = syn_clamp(p[FOOTSTEPPR_heel], 0, 1);
+    f->roll = syn_clamp(p[FOOTSTEPPR_roll], 0, 1);
+    f->ball = syn_clamp(p[FOOTSTEPPR_ball], 0, 1);
+    f->vol = syn_clamp(p[FOOTSTEPPR_masterVolume], 0, 1);
+    f->op0 = FP_START[terrain];
+    f->op1 = FP_START[terrain + 1u];
+    for (uint32_t k = 0, nz = 0; k < FP_NOPS; k++) {
+        f->st[k].a = f->st[k].b = 0, f->st[k].init = 0;
+        if (k >= f->op0 && k < f->op1 && FP_OPS[k].op == FP_NOISE) {   /* noise~: bfxr2's Math.random as a sound's
+                                                                        renderSeed (0.5) seeds it, a whole stream each */
+            syn_rng_seed(&f->st[k].rng, 0.5f);
+            rng_skip(&f->st[k].rng, nz++ * f->length);
+        }
+    }
+    for (uint32_t k = 0; k < FP_NODES; k++)
+        f->node[k] = 0;
+    f->i = 0;
+    return f->length;
+}
+
+static void footsteppr_whole(const float *p, uint32_t len, syn_whole_t *w)
+{
+    (void)p;
+    (void)len;
+    w->raw = 1;
+}
+
+static float fp_step(float n, float x)           /* bfxr2's step(n) */
+{
+    return x <= 0 || x >= 1 ? 0.0f : ((x * x * x) * n - x * n) * (1.0f - x) * -1.5f;
+}
+
+static inline float fp_in(const footsteppr_t *f, int16_t a) { return a >= 0 ? f->node[a] : FP_CONST[-1 - a]; }
+
+static void footsteppr_run(void *st, float *out, uint32_t n)
+{
+    footsteppr_t *f = st;
+    for (uint32_t q = 0; q < n; q++, f->i++) {
+        float x = (float)f->i / RATE / f->seconds, env;
+        env = fp_step(f->heel, x / 0.3333f) + fp_step(f->roll, (x - 0.125f) / 0.75f) + fp_step(f->ball, (x - 0.6667f) / 0.3333f);
+        for (uint32_t k = f->op0; k < f->op1; k++) {
+            const fp_op_t *o = &FP_OPS[k];
+            fp_state_t *s = &f->st[k];
+            float a = fp_in(f, o->a), v;
+            switch (o->op) {
+            case FP_ENV: v = env; break;
+            case FP_COPY: v = f->node[o->a]; break;
+            case FP_NOISE: v = syn_rnd(&s->rng) * 2.0f - 1.0f; break;
+            case FP_MUL: v = a * fp_in(f, o->b); break;
+            case FP_DIV: v = a / fp_in(f, o->b); break;
+            case FP_ADD: v = a + fp_in(f, o->b); break;
+            case FP_CLIP: v = fm_maxf(fp_in(f, o->b), fm_minf(a, fp_in(f, o->c))); break;
+            case FP_OSC: {                       /* osc~: Pd's table, its nearest entry below */
+                uint32_t idx;
+                s->a += a * (TAU / RATE);
+                while (s->a >= PI)
+                    s->a -= TAU;
+                while (s->a < -PI)
+                    s->a += TAU;
+                idx = (uint32_t)((s->a + PI) / TAU * 2048.0f);
+                v = fp_cos[idx & 2047u];
+                break;
+            }
+            case FP_LOP: {
+                float c = fm_clampf(fp_in(f, o->b) * (TAU / RATE), 0, 1);
+                if (!s->init)
+                    s->a = a, s->init = 1;
+                s->a = fm_flush(c * a + (1.0f - c) * s->a);
+                v = s->a;
+                break;
+            }
+            case FP_HIP: {
+                float c = fm_clampf(1.0f - fp_in(f, o->b) * (TAU / RATE), 0, 1);
+                if (!s->init)
+                    s->a = a, s->init = 1;
+                if (c < 1) {
+                    float cur = a + c * s->a;
+                    v = 0.5f * (1.0f + c) * (cur - s->a);
+                    s->a = fm_flush(cur);
+                } else
+                    v = a;
+                break;
+            }
+            case FP_VCF: {                       /* vcf~ as bfxr2's port runs it (its table index always 0) */
+                float q2 = fp_in(f, o->c), qinv = q2 > 0 ? 1.0f / q2 : 0.0f, amp = 2.0f - 2.0f / (q2 + 2.0f);
+                float cf = fm_maxf(0.0f, fp_in(f, o->b) * (TAU / RATE)), ci = cf * (2048.0f / 6.28318f);
+                float r = qinv > 0 ? fm_maxf(0.0f, 1.0f - cf * qinv) : 0.0f;
+                float cr = r * (fp_cos[0] + ci * (fp_cos[1] - fp_cos[0])), cim = r * (fp_cos[1536] + ci * (fp_cos[1537] - fp_cos[1536]));
+                float re2 = s->a;
+                s->a = amp * (1.0f - r) * a + cr * re2 - cim * s->b;
+                s->b = cim * re2 + cr * s->b;
+                if (fm_fabsf(s->a) < 1e-10f) s->a = 0;
+                if (fm_fabsf(s->b) < 1e-10f) s->b = 0;
+                v = s->a;
+                break;
+            }
+            case FP_BP: {
+                float fr = fp_in(f, o->b), q2 = fp_in(f, o->c), om, omr, r, c1, g2, y, gq;
+                if (!s->init)
+                    s->a = s->b = a, s->init = 1;
+                if (fr < 0.001f) fr = 10;
+                if (q2 < 0) q2 = 0;
+                om = fr * TAU / RATE;
+                omr = q2 < 0.001f ? 1.0f : om / q2;
+                if (omr > 1) omr = 1;
+                r = 1.0f - omr;
+                gq = om * om;
+                c1 = 2.0f * (om >= -0.5f * PI && om <= 0.5f * PI ?
+                             ((gq * gq * gq * (-1.0f / 720.0f) + gq * gq * (1.0f / 24.0f)) - gq * 0.5f) + 1.0f : 0.0f) * r;
+                g2 = 2.0f * omr * (omr + r * om);
+                y = a + c1 * s->a - r * r * s->b;
+                v = g2 * y;
+                s->b = s->a;
+                s->a = fm_flush(y);
+                break;
+            }
+            default: v = fm_sqrtf(fm_maxf(0.0f, a)); break;
+            }
+            f->node[o->dst] = v;
+        }
+        out[q] = fm_clampf(f->node[0] * f->vol, -1.0f, 1.0f) * 4.0f;
+    }
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -3956,6 +4104,7 @@ const syn_engine_t SYN_ENGINES[] = {
     {glitchr_begin, glitchr_run},
     {jinglr_begin, jinglr_run, jinglr_whole},
     {transfxr_begin, transfxr_run, transfxr_whole},
+    {footsteppr_begin, footsteppr_run, footsteppr_whole},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
@@ -3967,4 +4116,5 @@ _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_S
                sizeof(squishr_t) <= SYN_STATE_BYTES && sizeof(clonkr_t) <= SYN_STATE_BYTES &&
                sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES &&
                sizeof(riftr_t) <= SYN_STATE_BYTES && sizeof(glitchr_t) <= SYN_STATE_BYTES &&
-               sizeof(jinglr_t) <= SYN_STATE_BYTES && sizeof(transfxr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(jinglr_t) <= SYN_STATE_BYTES && sizeof(transfxr_t) <= SYN_STATE_BYTES &&
+               sizeof(footsteppr_t) <= SYN_STATE_BYTES, "synth state");

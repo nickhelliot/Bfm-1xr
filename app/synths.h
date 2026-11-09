@@ -47,6 +47,7 @@ typedef struct {
     uint8_t normalize;                   /* Riftr: after finishing, up to 4 times louder, to a peak of 0.9 */
     uint8_t plain;                       /* Transfxr: finished its own way, tanh alone (no mean taken out, no fades) */
     uint32_t fade_out;                   /* then faded over the last fade_out samples (0: none) */
+    uint8_t raw;                         /* Footsteppr: its own level already (volume in it), only clipped to -1 .. 1 */
 } syn_whole_t;
 
 typedef struct {

@@ -566,6 +566,8 @@ static void rd_done(void)                        /* the sound is ready: it plays
     sb_len = rd.len;
     sb_wide = rd.keep;
     sb_vol = fm_clampf(rd.p[0], 0.0f, 1.0f) * 0.95f;   /* the volume, masterVolume, is the first */
+    if (rd.w.raw)                                /* (Footsteppr: its volume in the sound already) */
+        sb_vol = 1.0f;
     if (rd.w.normalize && rd.peak * 0.95f > 0.00001f)  /* (Riftr: a quiet field brought up, at most 4 times) */
         sb_vol *= fm_minf(4.0f, fm_maxf(1.0f, 0.9f / (0.95f * rd.peak)));
     rd.state = RD_IDLE;
@@ -610,7 +612,7 @@ static void rd_tick(uint32_t budget_us)
         rd.whole = rd.w.reverse > 0 || rd.w.necho > 0;
         rd.state = RD_MEAN;
         rd.mean = 0;
-        if (rd.w.plain && !rd.keep && !rd.whole)
+        if ((rd.w.plain || rd.w.raw) && !rd.keep && !rd.whole)
             rd.state = RD_OUT;                   /* (no mean to take: made once, straight to bytes) */
     }
     while (rd.state != RD_IDLE && plat_ticks24() - t0 < budget_us * PLAT_TICKS_PER_US) {
@@ -623,7 +625,7 @@ static void rd_tick(uint32_t budget_us)
             int16_t *w16 = (int16_t *)(void *)sb_mem;
             for (i = 0; i < m; i++) {
                 uint32_t j = rd.pos + i;
-                float v = rd_raw(j) - rd.mean, x = fm_tanhf(v) * rd_fade(j);
+                float v = rd_raw(j) - rd.mean, x = rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
                 rd.peak = fm_maxf(rd.peak, fm_fabsf(x));
                 if (rd.keep)
                     w16[j] = (int16_t)(x * 32767.0f);
@@ -675,7 +677,7 @@ static void rd_tick(uint32_t budget_us)
             }
             rd.pos += m;
             if (rd.pos >= rd.len) {
-                rd.mean = rd.len && !rd.w.plain ? rd.sum / (float)rd.len : 0.0f;
+                rd.mean = rd.len && !rd.w.plain && !rd.w.raw ? rd.sum / (float)rd.len : 0.0f;
                 rd.pos = 0;
                 rd.state = RD_FINISH;
             }
@@ -700,7 +702,7 @@ static void rd_tick(uint32_t budget_us)
             }
             rd.pos += n;
             if (rd.pos >= rd.len) {
-                rd.mean = rd.len && !rd.w.plain ? rd.sum / (float)rd.len : 0.0f;
+                rd.mean = rd.len && !rd.w.plain && !rd.w.raw ? rd.sum / (float)rd.len : 0.0f;
                 if (!rd.keep && !rd.whole)
                     (void)e->begin(vm.mem, rd.p);    /* again from the start, for the samples */
                 rd.pos = 0;
@@ -713,7 +715,7 @@ static void rd_tick(uint32_t budget_us)
                 uint32_t j = rd.pos + i;
                 float v = blk[i];
                 v = v - v == 0.0f ? v - rd.mean : 0.0f;
-                v = fm_tanhf(v) * rd_fade(j);
+                v = rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
                 rd.peak = fm_maxf(rd.peak, fm_fabsf(v));
                 sb_mem[j] = mulaw(v);
             }

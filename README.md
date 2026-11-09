@@ -116,6 +116,7 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **GLITCHR** | Digital damage: buffer underruns, codec warble, tape scrub, bit rot, data squeal, stutter |
 | **JINGLR** | Little tunes for discoveries, victories and warnings, on pluck, bell, chip, flute, keys, reed, FM or strings |
 | **TRANSFXR** | A voice travelling between two states: each of PITCH, FILTER, WOBBLE, LEVEL and MORPH has a START, an END and a CURVE between them |
+| **FOOTSTEPPR** | Footsteps on snow, grass, dirt, gravel or wood: HEEL, ROLL and BALL shape the step, SWIFTNESS its pace |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
 
@@ -253,7 +254,8 @@ sound can be made while the FM-1 keeps running). `tools/check_synths.c` makes ev
 them (three takes of each button) and compares them with bfxr2's: most match to 60 dB or better below the sound. A
 few takes of Swarmr, Machinr, Zappr, Rustlr and Fractr part ways with bfxr2 midway, where a rounding difference moves a
 tick, a gear tooth, a spark or a shard's bounce by one sample and the noise after it is a different take of the same
-sound. Up to 2.5 seconds the FM-1 keeps a sound
+sound. Footsteppr runs bfxr2's Pure Data patches a sample at a time; its noise is the one bfxr2's Library gives a
+sound (bfxr.net's own page draws new noise every time you play, so each step there is a different take). Up to 2.5 seconds the FM-1 keeps a sound
 at 16 bits; longer sounds are kept at 8 bits (µ-law), which adds a little hiss.
 
 ## Build it yourself

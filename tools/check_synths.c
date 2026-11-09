@@ -83,7 +83,11 @@ int main(int argc, char **argv)
                 float vol = p[0] < 0 ? 0 : p[0] > 1 ? 1 : p[0];
                 if (fl < 1) fl = 1;
                 for (uint32_t i = 0; i < len; i++) {
-                    double v = isfinite(out[i]) ? out[i] - (w.plain ? 0 : mean) : 0, fade = 1;
+                    double v = isfinite(out[i]) ? out[i] - (w.plain || w.raw ? 0 : mean) : 0, fade = 1;
+                    if (w.raw) {                     /* (Footsteppr: its own level, only clipped) */
+                        out[i] = (float)(v < -1 ? -1 : v > 1 ? 1 : v);
+                        continue;
+                    }
                     if (w.plain) {                   /* (Transfxr's own: tanh, a fade at the end of an echo) */
                         if (w.fade_out && (double)(len - 1 - i) / w.fade_out < 1) fade = (double)(len - 1 - i) / w.fade_out;
                         out[i] = (float)(tanh(v) * vol * 0.95 * fade);
@@ -108,7 +112,7 @@ int main(int argc, char **argv)
                 bad++;
             }
             for (uint32_t i = 0; i < len && i < nref; i++) {
-                double e = out[i] - ref[i], vol = p[0] < 0 ? 0 : p[0] > 1 ? 1 : p[0];
+                double e = out[i] - ref[i], vol = w.raw ? 1.0 / 0.95 : p[0] < 0 ? 0 : p[0] > 1 ? 1 : p[0];
                 double x = vol > 0 ? out[i] / (vol * 0.95) : 0;
                 double m = vol > 0 ? (wide ? (double)(int16_t)(x * 32767.0) / 32767.0 : through_mulaw((float)x)) * vol * 0.95 - ref[i] : 0;
                 es += e * e; rs += (double)ref[i] * ref[i]; em += m * m;
