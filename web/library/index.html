@@ -61,8 +61,9 @@ connected by USB and running BFMXR.</p>
   <ul>
     <li>On the FM-1: hold <b>SAVE</b> and press a white key to store a sound in that slot; hold <b>SEL</b> and press a
       white key to recall it.</li>
-    <li>"Send" puts a .bfxr file into a slot (or into the sound being edited) and keeps it on the FM-1 at once. Only
-      bfxr.net's <b>Bfxr</b> sounds can be sent (not its other synths).</li>
+    <li>"Send" puts a .bfxr file into a slot (or into the sound being edited) and keeps it on the FM-1 at once: a
+      sound from bfxr.net's <b>Bfxr</b> or any of its other synths the FM-1 has (press <b>ENV</b> on the FM-1 for the
+      list).</li>
     <li>The .wav files are rendered here by bfxr's own code, at 44.1 kHz.</li>
   </ul>
   <p><a href="../">BFMXR</a> · <a href="https://github.com/nickhelliot/Bfm-1xr">Source</a></p>
@@ -70,6 +71,7 @@ connected by USB and running BFMXR.</p>
 </main>
 
 <script src="bfxrlib.min.js"></script>
+<script src="synths.js"></script>
 <script>
 // --- protocol ---
 // The 32 parameters in the FM-1's order (app/bfxr.h), by bfxr2's names, with their ranges and defaults.
@@ -86,14 +88,18 @@ const PARAMS = [
   ['hpFilterCutoffSweep', -1, 1, 0], ['bitCrush', 0, 1, 0], ['bitCrushSweep', -1, 1, 0]];
 const WAVES = ['SQUARE', 'SAW', 'SIN', 'WHITE', 'TRIANGLE', 'RASP', 'TAN', 'WHISTLE', 'BREAKER', 'BITNOISE', 'FMSYN', 'VOICE'];
 const NSLOTS = 16, CURRENT = 16;            // slot 16: the sound being edited
+// the FM-1's synths: 0 the classic Bfxr, then PRESET_SYNTHS (synths.js: [synth_type, version, parameter names])
+const synthName = id => id === 0 ? 'Bfxr' : (PRESET_SYNTHS[id - 1] || ['?'])[0];
+const synthKeys = id => id === 0 ? PARAMS.map(p => p[0]) : (PRESET_SYNTHS[id - 1] || [, , []])[2];
 const HEAD = [0xF0, 0x7D, 0x42, 0x46];      // "BF"
 const BFXR_VERSION = '1.0.4';               // bfxr2's classic Bfxr engine
 
-// a sound (an array of 32 numbers) <-> 160 bytes: each a float's 32 bits, five 7-bit bytes, low bits first
+// a sound's values (32 numbers: a preset synth's parameters first, then zeros) <-> 160 bytes: each a float's 32 bits,
+// five 7-bit bytes, low bits first
 function encodeSound(values) {
   const f = new Float32Array(1), u = new Uint32Array(f.buffer), out = [];
   for (let k = 0; k < PARAMS.length; k++) {
-    f[0] = values[k];
+    f[0] = k < values.length ? values[k] : 0;
     const b = u[0];
     out.push(b & 0x7F, (b >>> 7) & 0x7F, (b >>> 14) & 0x7F, (b >>> 21) & 0x7F, (b >>> 28) & 0x0F);
   }
@@ -108,40 +114,65 @@ function decodeSound(bytes) {
   }
   return out;
 }
+// A sound: {synth, values}. The protocol (app/app.c "the slots over USB"), version 2; version 1 (BFMXR before 0.8)
+// had no synth byte and only Bfxr's sounds.
 const listRequest = () => [...HEAD, 0x01, 0xF7];
-const writeRequest = (slot, values) => [...HEAD, 0x04, slot, ...encodeSound(values), 0xF7];
+const writeRequest = (slot, sound, version = 2) => version < 2
+  ? [...HEAD, 0x04, slot, ...encodeSound(sound.values), 0xF7]
+  : [...HEAD, 0x04, slot, sound.synth, ...encodeSound(sound.values), 0xF7];
 const clearRequest = slot => [...HEAD, 0x06, slot, 0xF7];
-// a frame from the FM-1 (F0 .. F7) -> {type: 'slot', slot, used, values} | {type: 'end', version, nslots} |
-// {type: 'reply', slot, status} | null (not BFMXR's)
+// a frame from the FM-1 (F0 .. F7) -> {type: 'slot', slot, used, synth, values} | {type: 'end', version, nslots,
+// nsynths} | {type: 'reply', slot, status} | null (not BFMXR's)
 function parseFrame(d) {
   if (d.length < 6 || d[0] !== 0xF0 || d[d.length - 1] !== 0xF7) return null;
   for (let i = 0; i < 4; i++) if (d[i] !== HEAD[i]) return null;
   const cmd = d[4], body = Array.from(d.slice(5, d.length - 1));
-  if (cmd === 0x02 && body.length === 2 + 5 * PARAMS.length)
-    return {type: 'slot', slot: body[0], used: !!body[1], values: decodeSound(body.slice(2))};
-  if (cmd === 0x03 && body.length === 2) return {type: 'end', version: body[0], nslots: body[1]};
+  if (cmd === 0x02 && body.length === 3 + 5 * PARAMS.length)
+    return {type: 'slot', slot: body[0], used: !!body[1], synth: body[2], values: decodeSound(body.slice(3))};
+  if (cmd === 0x02 && body.length === 2 + 5 * PARAMS.length)    // (version 1)
+    return {type: 'slot', slot: body[0], used: !!body[1], synth: 0, values: decodeSound(body.slice(2))};
+  if (cmd === 0x03 && body.length === 3) return {type: 'end', version: body[0], nslots: body[1], nsynths: body[2]};
+  if (cmd === 0x03 && body.length === 2) return {type: 'end', version: body[0], nslots: body[1], nsynths: 0};
   if (cmd === 0x05 && body.length === 2) return {type: 'reply', slot: body[0], status: body[1]};
   return null;
 }
 
-// a sound <-> bfxr2's .bfxr file (the editor's "Save .bfxr")
+// a sound <-> bfxr2's .bfxr file (the editor's "Save .bfxr"), and bfxr2's library's sound object (to play, render)
 const tidy = v => Number(Math.fround(v).toPrecision(7));
-function toBfxr(values, fileName) {
+function soundParams(sound) {
   const params = {};
-  PARAMS.forEach(([name], k) => { params[name] = name === 'waveType' ? Math.round(values[k]) : tidy(values[k]); });
-  return JSON.stringify({synth_type: 'Bfxr', version: BFXR_VERSION, file_name: fileName, params}, null, 2);
+  synthKeys(sound.synth).forEach((name, k) => {
+    // (a synth's seed, its Variation, exactly as the FM-1 holds it: the noise depends on every bit)
+    params[name] = name === 'waveType' && sound.synth === 0 ? Math.round(sound.values[k]) :
+                   name === 'seed' ? Math.fround(sound.values[k]) : tidy(sound.values[k]);
+  });
+  return params;
 }
+const soundVersion = synth => synth === 0 ? BFXR_VERSION : (PRESET_SYNTHS[synth - 1] || [, ''])[1];
+function toBfxr(sound, fileName) {
+  return JSON.stringify({synth_type: synthName(sound.synth), version: soundVersion(sound.synth), file_name: fileName,
+                         params: soundParams(sound)}, null, 2);
+}
+const soundObject = sound => ({synth_type: synthName(sound.synth), version: soundVersion(sound.synth), renderSeed: 0.5,
+                               params: soundParams(sound)});
 function fromBfxr(text) {
   let data;
   try { data = JSON.parse(text); } catch (e) { throw new Error('not a .bfxr file'); }
   if (!data || typeof data !== 'object' || !data.params) throw new Error('not a .bfxr file');
-  if (data.synth_type && data.synth_type !== 'Bfxr')
-    throw new Error(`a ${data.synth_type} sound: only Bfxr sounds play on the FM-1`);
-  return PARAMS.map(([name, min, max, def]) => {
+  const type = data.synth_type || 'Bfxr';
+  if (type === 'Bfxr')
+    return {synth: 0, values: PARAMS.map(([name, min, max, def]) => {
+      const v = Number(data.params[name]);
+      if (!Number.isFinite(v)) return def;
+      return Math.min(max, Math.max(min, name === 'waveType' ? Math.round(v) : v));
+    })};
+  const at = PRESET_SYNTHS.findIndex(s => s[0] === type);
+  if (at < 0) throw new Error(`a ${type} sound: that synth isn't on the FM-1 yet`);
+  // (a parameter missing: NaN, which the FM-1 takes as the synth's default; it keeps every value in range)
+  return {synth: at + 1, values: PRESET_SYNTHS[at][2].map(name => {
     const v = Number(data.params[name]);
-    if (!Number.isFinite(v)) return def;
-    return Math.min(max, Math.max(min, name === 'waveType' ? Math.round(v) : v));
-  });
+    return Number.isFinite(v) ? v : NaN;
+  })};
 }
 
 // a WAV file (16-bit mono) from samples -1 .. 1
@@ -200,9 +231,8 @@ function download(name, bytes, type) {
   a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
-const bfxrSound = values => ({synth_type: 'Bfxr', version: BFXR_VERSION, renderSeed: 0.5,
-  params: Object.fromEntries(PARAMS.map(([name], k) => [name, name === 'waveType' ? Math.round(values[k]) : values[k]]))});
-const wavOf = values => wavBytes(bfxr.render(bfxrSound(values)), bfxr.sampleRate);
+const wavOf = sound => wavBytes(bfxr.render(soundObject(sound)), bfxr.sampleRate);
+let fm1Version = 2;                         // the protocol the FM-1 answered with
 
 function onMessage(e) {
   const f = parseFrame(e.data);
@@ -248,6 +278,7 @@ function readAll() {
   waiting = f => {
     if (f.type === 'slot') got[f.slot] = f;
     if (f.type === 'end') {
+      fm1Version = f.version;
       clearTimeout(timer);
       waiting = null;
       sounds = got;
@@ -280,8 +311,9 @@ function sendFile(slot) {
     const file = inp.files[0];
     if (!file) return;
     try {
-      const values = fromBfxr(await file.text());
-      await send(writeRequest(slot, values), slot);
+      const sound = fromBfxr(await file.text());
+      if (sound.synth && fm1Version < 2) throw new Error('this FM-1 has only Bfxr: install BFMXR 0.8 or later');
+      await send(writeRequest(slot, sound, fm1Version), slot);
       status(`${file.name} is in ${slot === CURRENT ? 'the sound being edited' : 'slot ' + (slot + 1)}.`);
       readAll();
     } catch (e) { status(`${file.name}: ${e.message}`, true); }
@@ -297,16 +329,16 @@ function draw() {
     const s = sounds[slot], used = s && s.used, li = document.createElement('li');
     if (!used) li.className = 'empty';
     const name = slot === CURRENT ? 'Editing' : `Slot ${slot + 1}`;
-    const wave = used ? WAVES[Math.round(s.values[1])] || '' : '';
+    const wave = !used ? '' : s.synth === 0 ? 'Bfxr · ' + (WAVES[Math.round(s.values[1])] || '') : synthName(s.synth);
     li.innerHTML = `<span class="n"></span><span class="what"></span><span class="acts"></span>`;
     li.querySelector('.n').textContent = name;
     li.querySelector('.what').innerHTML = used ? `${wave}<small>${slot === CURRENT ? 'the sound on the screen now' : ''}</small>` : 'empty';
     const acts = li.querySelector('.acts');
     const btn = (label, fn, quiet) => { const b = document.createElement('button'); b.textContent = label; if (quiet) b.className = 'quiet'; b.onclick = fn; acts.appendChild(b); };
     if (used) {
-      btn('Play', () => bfxr.play(bfxrSound(s.values)));
-      btn('.bfxr', () => download(slotName(slot) + '.bfxr', new TextEncoder().encode(toBfxr(s.values, slotName(slot))), 'application/json'));
-      btn('.wav', () => download(slotName(slot) + '.wav', wavOf(s.values), 'audio/wav'));
+      btn('Play', () => bfxr.play(soundObject(s)));
+      btn('.bfxr', () => download(slotName(slot) + '.bfxr', new TextEncoder().encode(toBfxr(s, slotName(slot))), 'application/json'));
+      btn('.wav', () => download(slotName(slot) + '.wav', wavOf(s), 'audio/wav'));
     }
     btn('Send', () => sendFile(slot), true);
     if (used && slot !== CURRENT)
@@ -324,7 +356,7 @@ $('all').onclick = () => {
   sounds.forEach((s, slot) => {
     if (!s || !s.used) return;
     const name = slotName(slot);
-    files.push([name + '.bfxr', new TextEncoder().encode(toBfxr(s.values, name))], [name + '.wav', wavOf(s.values)]);
+    files.push([name + '.bfxr', new TextEncoder().encode(toBfxr(s, name))], [name + '.wav', wavOf(s)]);
   });
   download('bfmxr-sounds.zip', zipBytes(files), 'application/zip');
 };

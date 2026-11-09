@@ -1,7 +1,8 @@
 # BFMXR for the M-VAVE FM-1
 
 BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
-hits, jumps and blips, made the way bfxr.net makes them and played from the keys.
+hits, jumps and blips, made the way bfxr.net makes them and played from the keys. Press **ENV** for bfxr.net's other
+synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines and critters, each on its own screen.
 
 ![The BFMXR screen](docs/screen.png)
 
@@ -51,6 +52,7 @@ Press any key or button to skip it. **GLO → START-UP** turns the sound or the 
 | **OCT− / OCT+** | Shift the keys and PLAY down or up an octave (−2 to +2) |
 | **HOME** | Jumps back to the top of the list |
 | **GLO** | Opens and closes the settings (below) |
+| **ENV** | Opens the synth menu: the classic Bfxr and bfxr.net's other synths (below) |
 | **SAVE** (tap) | Keeps the sound: it's there again the next time you switch on. SAVE is lit while there's something unsaved |
 | **SAVE + a white key** | Stores the sound in that key's slot (16 slots, one per white key) |
 | **SEL + a white key** | Recalls the sound from that key's slot and plays it |
@@ -83,6 +85,41 @@ work while the settings are open.
 ![The settings](docs/menu.png)
 
 ![The 20 palettes](docs/palettes.png)
+
+## The synths (ENV)
+
+bfxr.net has more synths than the classic Bfxr, each on its own tab. On the FM-1 each has its own screen: press
+**ENV** for the synth menu, turn **SELECT** to pick one, and press **SEL** (or ENV again) to open it. **HOME** closes
+the menu without changing anything. ENV is lit while you're on a synth other than Bfxr.
+
+| Synth | What it makes |
+| --- | --- |
+| **BFXR** | The classic: coins, lasers, explosions, power-ups, hits, jumps, blips |
+| **WHOOSHR** | Swings, dodges, things flying past |
+| **CHOIRR** | Choirs: chords of singers on vowels |
+| **BREATHR** | Breaths in and out, sighs, snores |
+| **BIRDR** | Birdsong: whistles, trills, chirps |
+| **BOUNCR** | Things dropped and bouncing on a surface |
+| **SWARMR** | Flocks and swarms: wings, chirps, rotors, ticks |
+| **MACHINR** | Motors, gears, shutters, clocks, engines, servos, doors |
+| **CRITTR** | Creature calls, from throats and beaks to a dog and a cat |
+
+On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
+
+- **PRESET** steps through the synth's own sounds (bfxr.net's buttons for it: SWORD SWING, DODGE, ARROW PASS...),
+  then RANDOMIZE. Each click makes a new one and plays it.
+- **EDIT** makes another of the same; **FX** mutates it.
+- **SELECT** and **K1 to K4** change its sliders. A choice (VOICE, MATERIAL...) shows its name and moves one step a
+  click; a count (SYLLABLES, CALLS...) moves one a click.
+- **ALGO** is **VARIATION**: the same settings, a different take (bfxr.net's seed).
+- Each synth keeps its own sound: go from Whooshr to Birdr and back, and your Whooshr sound is still there. Slots
+  remember which synth a sound came from, so recalling one takes you to its synth.
+
+These synths make the whole sound before it plays, so after a change the header says **MAKING** for a moment (longer
+for long sounds and for big swarms). A sound can be up to 5 seconds long; a longer one (Machinr goes to 6) is cut at
+5 seconds.
+
+![The synth menu](docs/synths.png) ![Birdr](docs/birdr.png)
 
 ## Making a sound
 
@@ -122,8 +159,8 @@ The **[Library](https://nickhelliot.github.io/Bfm-1xr/library/)** page reads the
    - **Clear** empties the slot on the FM-1.
 3. **Download all (.zip)** saves every stored sound as both .bfxr and .wav in one file.
 4. **Send** puts a .bfxr file from your computer into a slot, or into the sound you're editing ("Editing"). Make a
-   sound on bfxr.net, save it with **Save .bfxr**, and send it to the FM-1. Only bfxr.net's Bfxr sounds can go to the
-   FM-1, not its other synths.
+   sound on bfxr.net, save it with **Save .bfxr**, and send it to the FM-1: from Bfxr or any of the other synths the
+   FM-1 has (sending one to "Editing" switches the FM-1 to that synth).
 
 The .wav files are rendered by bfxr's own code, so they sound as on bfxr.net. You can also record the FM-1 itself:
 it's a USB audio input in any DAW.
@@ -176,6 +213,8 @@ The same as bfxr.net's sliders, in the same order. Values are bfxr's, from 0 to 
 - **Lots of HARMONICS is the heaviest thing for the FM-1**, as it is for bfxr.net. If you ever hear clicks or gaps
   that bfxr.net doesn't make, report it with the settings you used.
 - **A sound only plays once it's finished being edited:** turn a knob, stop, and it plays.
+- **On the other synths, keep sounds short for quick changes:** they're made in full before they play, so a 5-second
+  Swarmr with 32 insects takes the longest to make.
 
 ## If something goes wrong
 
@@ -195,6 +234,13 @@ with every wave and every kind of sound: 327 come out the same sample for sample
 cycle one sample early or late), and 2 slightly different (the TAN wave through a filter, where rounding decides the
 result).
 
+The other synths are bfxr2's, each rewritten to run on the FM-1 (in single precision, and a block at a time so a
+sound can be made while the FM-1 keeps running). `tools/check_synths.c` makes every one of bfxr2's own sounds for
+them (three takes of each button) and compares them with bfxr2's: most match to 60 dB or better below the sound. A
+few takes of Swarmr and Machinr part ways with bfxr2 midway, where a rounding difference moves a tick or a gear tooth
+by one sample and the noise after it is a different take of the same sound. Up to 2.5 seconds the FM-1 keeps a sound
+at 16 bits; longer sounds are kept at 8 bits (µ-law), which adds a little hiss.
+
 ## Build it yourself
 
 GitHub builds every push (Actions, "Build firmware") and publishes the installer and the emulator. The version is in
@@ -209,18 +255,20 @@ GitHub builds every push (Actions, "Build firmware") and publishes the installer
 | Where | What |
 | --- | --- |
 | `app/bfxr.c` | The sound engine and the sound generators (from bfxr2) |
+| `app/synths.c`, `app/synth_tables.h` | bfxr2's other synths, and their sliders and buttons (made by `tools/gen_synth_tables.py`) |
 | `app/app.c` | The screen, the controls, saving |
 | `app/tests/basic.txt` | The simulator's checks |
 | `app/assets/`, `tools/gen_splash.py` | The start-up animation and sound, and the tool that turns them into `app/splash_data.h` |
 | `web/library/index.html` | The Library page (the slots over USB: SysEx, described in `app/app.c`) |
 | `tools/check_engine.c`, `tools/gen_ref.js` | The comparison with bfxr2's JavaScript |
+| `tools/check_synths.c`, `tools/gen_synths.js` | The same for the other synths |
 | `tools/library_test.mjs` | The Library page's protocol against the simulator |
 | `base/` | fm1-base, the platform (a git submodule) |
 
 ## Credits and licence
 
-- Sound engine and generators: [bfxr2](https://github.com/increpare/bfxr2) by Stephen Lavelle (MIT), from Thomas
-  Vian's SfxrSynth (Apache-2.0)
+- Sound engine, generators and the other synths: [bfxr2](https://github.com/increpare/bfxr2) by Stephen Lavelle (MIT),
+  from Thomas Vian's SfxrSynth (Apache-2.0)
 - Start-up animation and sound: by Dad
 - Waves: [Adventure Kid Waveforms](https://www.adventurekid.se/akrt/waveforms/adventure-kid-waveforms/) (CC0)
 - Platform: [fm1-base](https://github.com/charlesvestal/fm1-base) by Charles Vestal and

@@ -118,15 +118,15 @@ wait 30
 expect playing 1
 key 7 up
 # --- over USB: write slot 6 (index 5, a default sound), list, recall it, clear it
-sysex F0 7D 42 46 04 05 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+sysex F0 7D 42 46 04 05 00 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
 wait 30
 expect_sysex F0 7D 42 46 05 05 00 F7
 expect slots 33
 sysex_out
 sysex F0 7D 42 46 01 F7
 wait 200
-expect_sysex F0 7D 42 46 02 05 01 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
-expect_sysex F0 7D 42 46 03 01 10 F7
+expect_sysex F0 7D 42 46 02 05 01 00 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 4D 19 33 76 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+expect_sysex F0 7D 42 46 03 02 10 08 F7
 press SEL
 key 9 down
 wait 30
@@ -155,7 +155,7 @@ expect splash 0
 expect slots 1
 
 # --- chords: a key each its own sound (4 at most); PLAY one sound, as bfxr.net
-sysex F0 7D 42 46 04 10 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
+sysex F0 7D 42 46 04 10 00 00 00 00 78 03 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 1A 33 66 74 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 7C 03 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 F7
 wait 50
 key 7 down
 key 11 down
@@ -309,3 +309,99 @@ wait 30
 tap GLO
 wait 30
 expect palette 0
+# --- ENV: the synths. The menu opens on the synth on screen; SELECT picks, SEL opens it
+tap ENV
+wait 30
+expect picker 1
+shot synths.png
+turn SELECT 1
+wait 30
+expect picker 2
+tap SEL
+wait 30
+expect picker 0
+expect synth 1
+# Whooshr's sound renders into the buffer (its default: 0.6 s)
+wait 400
+expect ready 1
+expect sblen 601
+shot whooshr.png
+tap PLAY
+wait 50
+expect playing 1
+wav whooshr.wav
+wait 550
+wavstop
+expect peak_db_min -40
+# PRESET: its recipes, then RANDOMIZE (8: after its 8 recipes); at first it has its defaults, no recipe
+expect recipe -1
+turn PRESET 1
+wait 30
+expect recipe 0
+turn PRESET -1
+wait 30
+expect recipe 8
+wait 600
+expect ready 1
+# FX mutates; a key plays it, transposed
+tap FX
+wait 600
+key 12 down
+wait 30
+key 12 up
+# SELECT and K1: DURATION, row 2, down to 0.1 s
+turn SELECT 2
+turn K1 -100
+wait 30
+expect p2 10
+wait 400
+expect ready 1
+expect sblen 100
+# store it in slot 10 (key 16), then to Bfxr: each synth keeps its own sound
+press SAVE
+key 16 down
+wait 30
+key 16 up
+release SAVE
+wait 30
+expect slot 10
+tap ENV
+turn SELECT -1
+tap ENV
+wait 30
+expect synth 0
+# recalling slot 10 goes back to Whooshr, with the sound stored
+press SEL
+key 16 down
+wait 30
+key 16 up
+release SEL
+wait 30
+expect synth 1
+expect p2 10
+# kept over a restart
+tap SAVE
+wait 30
+reboot
+wait 1700
+expect synth 1
+expect p2 10
+wait 400
+expect ready 1
+# over USB: the list ends with the protocol version, the slots and the synths
+sysex_out
+sysex F0 7D 42 46 01 F7
+wait 300
+expect_sysex F0 7D 42 46 03 02 10 08 F7
+# back to Bfxr; HOME leaves the menu as it was
+tap ENV
+turn SELECT -5
+tap HOME
+wait 30
+expect picker 0
+expect synth 1
+tap ENV
+turn SELECT -5
+tap SEL
+wait 30
+expect synth 0

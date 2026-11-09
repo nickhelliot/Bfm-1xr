@@ -28,10 +28,14 @@ jobs:
         set -euo pipefail
         ./build.sh --host
         app/build/host/bfmxr_host app/tests/basic.txt app/build/host
-        git clone -q --depth 1 https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
+        git clone -q https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
+        git -C "$RUNNER_TEMP/bfxr2" checkout -q 43c6c3b15e76407e9863b999741340999225e21f   # (the version ported)
         node tools/gen_ref.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/ref"
         cc -O2 -ffp-contract=off -I base/include -I app -o "$RUNNER_TEMP/check_engine" tools/check_engine.c app/bfxr.c -lm
         "$RUNNER_TEMP/check_engine" "$RUNNER_TEMP/ref" || true   # (two TAN cases differ by design: see the file)
+        node tools/gen_synths.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/sref" > /dev/null
+        cc -O2 -ffp-contract=off -I base/include -I app -o "$RUNNER_TEMP/check_synths" tools/check_synths.c app/synths.c -lm
+        "$RUNNER_TEMP/check_synths" "$RUNNER_TEMP/sref" || true   # (the other synths against bfxr2: see the file)
         node tools/library_test.mjs "$RUNNER_TEMP/bfxr2"
       packages: app/build/bfmxr*.fwsc
 
@@ -79,7 +83,7 @@ jobs:
           python3 base/tools/make_site.py app "dl/app/build/bfmxr-$version.fwsc" "$version" _site
           # the Library page, with bfxr2's library (MIT) at a fixed commit to play and render the sounds
           mkdir -p _site/library
-          cp web/library/index.html _site/library/
+          cp web/library/index.html web/library/synths.js _site/library/
           git clone -q https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
           git -C "$RUNNER_TEMP/bfxr2" checkout -q 43c6c3b15e76407e9863b999741340999225e21f
           cp "$RUNNER_TEMP/bfxr2/lib/bfxrlib.min.js" "$RUNNER_TEMP/bfxr2/LICENSE" _site/library/
