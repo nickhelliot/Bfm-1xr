@@ -13,8 +13,10 @@ typedef struct {
     const char *key;                     /* bfxr2's name */
     const char *label;                   /* on the screen */
     float def, min, max;
-    const char *choices;                 /* a choice: "WOOD|GLASS|..." (its values 0, 1, ...); 0 for a range */
+    const char *choices;                 /* a choice: "WOOD|GLASS|..." (its values min, min + 1, ...); 0 for a range */
     uint8_t round;                       /* bfxr2 rounds it to a whole number */
+    const int8_t *values;                /* a choice's values when they are not min, min + 1, ... (nvalues of them) */
+    uint8_t nvalues;
 } syn_param_t;
 
 enum { SYN_RV_RANGE, SYN_RV_FIXED, SYN_RV_PICK };
@@ -32,6 +34,7 @@ typedef struct {
     const syn_param_t *p;
     uint8_t nr;
     const syn_recipe_t *r;
+    uint8_t randomize;                   /* 0 every slider at random; 1 a random recipe; 2 that, the length capped (Crittr) */
 } syn_info_t;
 
 typedef struct {
@@ -68,4 +71,5 @@ void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng);   /
 void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng);           /* randomize_params */
 void syn_mutate(const syn_info_t *sy, float *p, syn_rng_t *rng);              /* mutate_params */
 int syn_find(const syn_info_t *sy, const char *key);                          /* a parameter's index, -1: none */
-int syn_choices(const syn_param_t *d, uint32_t v, char *out, uint32_t cap);   /* the name of choice v; 0: none */
+int syn_choices(const syn_param_t *d, float v, char *out, uint32_t cap);      /* the name of the choice of value v; 0: none */
+float syn_choice_step(const syn_param_t *d, float v, int32_t dir);           /* the next (dir 1) or last (-1) choice's value */

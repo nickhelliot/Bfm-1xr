@@ -33,11 +33,11 @@ for (const name of bfxr.synths()) {
     if (row && row.type === 'BUTTONSELECT')     // a choice: values [[label, tip, value], ...]
       return {label: row.display_name || row.name, key: row.name, def: row.default_value,
               min: Math.min(...row.values.map(v => v[2])), max: Math.max(...row.values.map(v => v[2])),
-              choices: row.values.map(v => v[0])};
+              choices: row.values.map(v => v[0]), values: row.values.map(v => v[2])};
     return null;
   }).filter(Boolean);
   fs.writeFileSync(path.join(dir, 'params.txt'), rows.map(r => `${r.key}\t${r.def}\t${r.min}\t${r.max}\t${r.label}` +
-    (r.choices ? `\tselect:${r.choices.join('|')}` : '')).join('\n') + '\n');
+    (r.choices ? `\tselect:${r.choices.join('|')}\tvalues:${r.values.join(',')}` : '')).join('\n') + '\n');
   fs.writeFileSync(path.join(dir, 'recipes.json'), JSON.stringify(engine.recipes || [], null, 1));
   fs.writeFileSync(path.join(dir, 'version.txt'), String(engine.version || '') + '\n');   // (a .bfxr file's "version")
   let n = 0;

@@ -5,15 +5,15 @@
 
 enum { WHOOSHR_masterVolume, WHOOSHR_seed, WHOOSHR_duration, WHOOSHR_size, WHOOSHR_air, WHOOSHR_whistle, WHOOSHR_movement, WHOOSHR_focus, WHOOSHR_flutter, WHOOSHR_NP };
 static const syn_param_t WHOOSHR_P[9] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"duration", "DURATION", 0.6f, 0.1f, 5.0f, 0, 0},
-    {"size", "SIZE", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"air", "AIR", 0.8f, 0.0f, 1.0f, 0, 0},
-    {"whistle", "WHISTLE", 0.25f, 0.0f, 1.0f, 0, 0},
-    {"movement", "FLYBY", 0.7f, 0.0f, 1.0f, 0, 0},
-    {"focus", "FOCUS", 0.6f, 0.0f, 1.0f, 0, 0},
-    {"flutter", "FLUTTER", 0.1f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 0.6f, 0.1f, 5.0f, 0, 0, 0, 0},
+    {"size", "SIZE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"air", "AIR", 0.8f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"whistle", "WHISTLE", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"movement", "FLYBY", 0.7f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"focus", "FOCUS", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"flutter", "FLUTTER", 0.1f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t WHOOSHR_R0[7] = {{WHOOSHR_duration, SYN_RV_RANGE, 0, 0.18f, 0.42f, 0}, {WHOOSHR_size, SYN_RV_RANGE, 0, 0.25f, 0.5f, 0}, {WHOOSHR_air, SYN_RV_RANGE, 0, 0.6f, 0.9f, 0}, {WHOOSHR_whistle, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {WHOOSHR_movement, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {WHOOSHR_focus, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {WHOOSHR_flutter, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}};
 static const syn_rv_t WHOOSHR_R1[7] = {{WHOOSHR_duration, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {WHOOSHR_size, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {WHOOSHR_air, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {WHOOSHR_whistle, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {WHOOSHR_movement, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {WHOOSHR_focus, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {WHOOSHR_flutter, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}};
@@ -36,17 +36,17 @@ static const syn_recipe_t WHOOSHR_RECIPES[8] = {
 
 enum { CHOIRR_masterVolume, CHOIRR_seed, CHOIRR_harmony, CHOIRR_duration, CHOIRR_pitch, CHOIRR_voices, CHOIRR_vowel, CHOIRR_detune, CHOIRR_swell, CHOIRR_breath, CHOIRR_motion, CHOIRR_NP };
 static const syn_param_t CHOIRR_P[11] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "ENSEMBLE SEED", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"harmony", "HARMONY", 1.0f, 0.0f, 4.0f, "UNISON|MAJOR|MINOR|FIFTHS|CLUSTER", 0},
-    {"duration", "DURATION", 2.5f, 0.15f, 5.0f, 0, 0},
-    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"voices", "SINGERS", 6.0f, 1.0f, 12.0f, 0, 1},
-    {"vowel", "VOWEL", 0.35f, 0.0f, 1.0f, 0, 0},
-    {"detune", "DETUNE", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"swell", "SWELL", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"breath", "BREATH", 0.1f, 0.0f, 1.0f, 0, 0},
-    {"motion", "LIVING MOTION", 0.4f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "ENSEMBLE SEED", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"harmony", "HARMONY", 1.0f, 0.0f, 4.0f, "UNISON|MAJOR|MINOR|FIFTHS|CLUSTER", 0, 0, 0},
+    {"duration", "DURATION", 2.5f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"voices", "SINGERS", 6.0f, 1.0f, 12.0f, 0, 1, 0, 0},
+    {"vowel", "VOWEL", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"detune", "DETUNE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"swell", "SWELL", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"breath", "BREATH", 0.1f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"motion", "LIVING MOTION", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t CHOIRR_R0[9] = {{CHOIRR_harmony, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {CHOIRR_duration, SYN_RV_RANGE, 0, 2.5f, 4.5f, 0}, {CHOIRR_pitch, SYN_RV_RANGE, 0, 0.45f, 0.66f, 0}, {CHOIRR_voices, SYN_RV_RANGE, 0, 6.0f, 10.0f, 0}, {CHOIRR_vowel, SYN_RV_RANGE, 0, 0.18f, 0.4f, 0}, {CHOIRR_detune, SYN_RV_RANGE, 0, 0.18f, 0.4f, 0}, {CHOIRR_swell, SYN_RV_RANGE, 0, 0.45f, 0.75f, 0}, {CHOIRR_breath, SYN_RV_RANGE, 0, 0.06f, 0.2f, 0}, {CHOIRR_motion, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}};
 static const syn_rv_t CHOIRR_R1[9] = {{CHOIRR_harmony, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CHOIRR_duration, SYN_RV_RANGE, 0, 2.6f, 4.8f, 0}, {CHOIRR_pitch, SYN_RV_RANGE, 0, 0.06f, 0.27f, 0}, {CHOIRR_voices, SYN_RV_RANGE, 0, 5.0f, 9.0f, 0}, {CHOIRR_vowel, SYN_RV_RANGE, 0, 0.08f, 0.32f, 0}, {CHOIRR_detune, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {CHOIRR_swell, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {CHOIRR_breath, SYN_RV_RANGE, 0, 0.08f, 0.24f, 0}, {CHOIRR_motion, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}};
@@ -69,20 +69,20 @@ static const syn_recipe_t CHOIRR_RECIPES[8] = {
 
 enum { BREATHR_masterVolume, BREATHR_seed, BREATHR_source, BREATHR_mode, BREATHR_duration, BREATHR_direction, BREATHR_cycles, BREATHR_effort, BREATHR_inhale, BREATHR_hold, BREATHR_throat, BREATHR_rasp, BREATHR_flutter, BREATHR_space, BREATHR_NP };
 static const syn_param_t BREATHR_P[14] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"source", "AIRWAY", 0.0f, 0.0f, 2.0f, "AIRFLOW|RETRO|SNORE", 0},
-    {"mode", "BREATH", 0.0f, 0.0f, 1.0f, "SINGLE|CYCLE", 0},
-    {"duration", "DURATION", 0.65f, 0.15f, 5.0f, 0, 0},
-    {"direction", "DIRECTION", 1.0f, -1.0f, 1.0f, 0, 0},
-    {"cycles", "BREATHS", 1.0f, 1.0f, 10.0f, 0, 1},
-    {"effort", "EXERTION", 0.55f, 0.0f, 1.0f, 0, 0},
-    {"inhale", "INHALE SHARE", 0.42f, 0.1f, 0.9f, 0, 0},
-    {"hold", "HOLD", 0.04f, 0.0f, 0.7f, 0, 0},
-    {"throat", "THROAT SIZE", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"rasp", "RASP", 0.1f, 0.0f, 1.0f, 0, 0},
-    {"flutter", "TREMBLE", 0.15f, 0.0f, 1.0f, 0, 0},
-    {"space", "ENCLOSURE", 0.1f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"source", "AIRWAY", 0.0f, 0.0f, 2.0f, "AIRFLOW|RETRO|SNORE", 0, 0, 0},
+    {"mode", "BREATH", 0.0f, 0.0f, 1.0f, "SINGLE|CYCLE", 0, 0, 0},
+    {"duration", "DURATION", 0.65f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"direction", "DIRECTION", 1.0f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"cycles", "BREATHS", 1.0f, 1.0f, 10.0f, 0, 1, 0, 0},
+    {"effort", "EXERTION", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"inhale", "INHALE SHARE", 0.42f, 0.1f, 0.9f, 0, 0, 0, 0},
+    {"hold", "HOLD", 0.04f, 0.0f, 0.7f, 0, 0, 0, 0},
+    {"throat", "THROAT SIZE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"rasp", "RASP", 0.1f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"flutter", "TREMBLE", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"space", "ENCLOSURE", 0.1f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t BREATHR_R0[9] = {{BREATHR_mode, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BREATHR_source, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BREATHR_direction, SYN_RV_RANGE, 0, -1.0f, -0.7f, 0}, {BREATHR_duration, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {BREATHR_effort, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {BREATHR_throat, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {BREATHR_rasp, SYN_RV_RANGE, 0, 0.0f, 0.16f, 0}, {BREATHR_flutter, SYN_RV_RANGE, 0, 0.03f, 0.2f, 0}, {BREATHR_space, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
 static const syn_rv_t BREATHR_R1[9] = {{BREATHR_mode, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BREATHR_source, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BREATHR_direction, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BREATHR_duration, SYN_RV_RANGE, 0, 0.35f, 0.95f, 0}, {BREATHR_effort, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {BREATHR_throat, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}, {BREATHR_rasp, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {BREATHR_flutter, SYN_RV_RANGE, 0, 0.02f, 0.18f, 0}, {BREATHR_space, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
@@ -118,22 +118,22 @@ static const syn_recipe_t BREATHR_RECIPES[12] = {
 
 enum { BIRDR_masterVolume, BIRDR_seed, BIRDR_voice, BIRDR_duration, BIRDR_pitch, BIRDR_syllables, BIRDR_gap, BIRDR_sweep, BIRDR_arch, BIRDR_trill, BIRDR_trill_rate, BIRDR_duet, BIRDR_rasp, BIRDR_breath, BIRDR_rhythm, BIRDR_variation, BIRDR_NP };
 static const syn_param_t BIRDR_P[16] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"voice", "VOICE", 0.0f, 0.0f, 4.0f, "WHISTLE|TWIN|REED|RASP|HOOT", 0},
-    {"duration", "DURATION", 0.8f, 0.15f, 5.0f, 0, 0},
-    {"pitch", "PITCH", 0.58f, 0.0f, 1.0f, 0, 0},
-    {"syllables", "SYLLABLES", 3.0f, 1.0f, 16.0f, 0, 1},
-    {"gap", "GAP", 0.3f, 0.0f, 0.85f, 0, 0},
-    {"sweep", "SWEEP", -0.3f, -1.0f, 1.0f, 0, 0},
-    {"arch", "ARCH", 0.45f, -1.0f, 1.0f, 0, 0},
-    {"trill", "TRILL", 0.15f, 0.0f, 1.0f, 0, 0},
-    {"trill_rate", "TRILL RATE", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"duet", "DUET", 0.1f, 0.0f, 1.0f, 0, 0},
-    {"rasp", "RASP", 0.04f, 0.0f, 1.0f, 0, 0},
-    {"breath", "BREATH", 0.03f, 0.0f, 1.0f, 0, 0},
-    {"rhythm", "RHYTHM", 0.12f, 0.0f, 1.0f, 0, 0},
-    {"variation", "PHRASE", 0.25f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"voice", "VOICE", 0.0f, 0.0f, 4.0f, "WHISTLE|TWIN|REED|RASP|HOOT", 0, 0, 0},
+    {"duration", "DURATION", 0.8f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.58f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"syllables", "SYLLABLES", 3.0f, 1.0f, 16.0f, 0, 1, 0, 0},
+    {"gap", "GAP", 0.3f, 0.0f, 0.85f, 0, 0, 0, 0},
+    {"sweep", "SWEEP", -0.3f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"arch", "ARCH", 0.45f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"trill", "TRILL", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"trill_rate", "TRILL RATE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duet", "DUET", 0.1f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"rasp", "RASP", 0.04f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"breath", "BREATH", 0.03f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"rhythm", "RHYTHM", 0.12f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"variation", "PHRASE", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t BIRDR_R0[11] = {{BIRDR_voice, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BIRDR_duration, SYN_RV_RANGE, 0, 0.15f, 0.32f, 0}, {BIRDR_pitch, SYN_RV_RANGE, 0, 0.57f, 0.78f, 0}, {BIRDR_syllables, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BIRDR_gap, SYN_RV_RANGE, 0, 0.08f, 0.2f, 0}, {BIRDR_sweep, SYN_RV_RANGE, 0, -0.75f, 0.65f, 0}, {BIRDR_arch, SYN_RV_RANGE, 0, 0.25f, 0.9f, 0}, {BIRDR_trill, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {BIRDR_duet, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {BIRDR_rasp, SYN_RV_RANGE, 0, 0.0f, 0.05f, 0}, {BIRDR_breath, SYN_RV_RANGE, 0, 0.01f, 0.06f, 0}};
 static const syn_rv_t BIRDR_R1[12] = {{BIRDR_voice, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BIRDR_duration, SYN_RV_RANGE, 0, 0.45f, 1.0f, 0}, {BIRDR_pitch, SYN_RV_RANGE, 0, 0.6f, 0.77f, 0}, {BIRDR_syllables, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {BIRDR_gap, SYN_RV_RANGE, 0, 0.35f, 0.58f, 0}, {BIRDR_sweep, SYN_RV_RANGE, 0, -0.6f, -0.1f, 0}, {BIRDR_arch, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {BIRDR_trill, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}, {BIRDR_duet, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}, {BIRDR_rasp, SYN_RV_RANGE, 0, 0.08f, 0.25f, 0}, {BIRDR_rhythm, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {BIRDR_variation, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}};
@@ -160,19 +160,19 @@ static const syn_recipe_t BIRDR_RECIPES[10] = {
 
 enum { BOUNCR_masterVolume, BOUNCR_material, BOUNCR_surface, BOUNCR_force, BOUNCR_duration, BOUNCR_size, BOUNCR_hardness, BOUNCR_tail, BOUNCR_seed, BOUNCR_count, BOUNCR_bounce, BOUNCR_gravity, BOUNCR_spin, BOUNCR_NP };
 static const syn_param_t BOUNCR_P[13] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"material", "OBJECT", 0.0f, 0.0f, 4.0f, "RUBBER|WOOD|METAL|GLASS|STONE", 0},
-    {"surface", "SURFACE", 0.0f, 0.0f, 5.0f, "CONCRETE|WOOD|METAL|GLASS|EARTH|FABRIC", 0},
-    {"force", "FORCE", 0.65f, 0.0f, 1.0f, 0, 0},
-    {"duration", "DURATION", 2.0f, 0.2f, 5.0f, 0, 0},
-    {"size", "MASS / SIZE", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"hardness", "HARDNESS", 0.6f, 0.0f, 1.0f, 0, 0},
-    {"tail", "TAIL", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"count", "CONTACTS", 1.0f, 1.0f, 20.0f, 0, 0},
-    {"bounce", "ELASTICITY", 0.65f, 0.0f, 1.0f, 0, 0},
-    {"gravity", "GRAVITY", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"spin", "SPIN", 0.0f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"material", "OBJECT", 0.0f, 0.0f, 4.0f, "RUBBER|WOOD|METAL|GLASS|STONE", 0, 0, 0},
+    {"surface", "SURFACE", 0.0f, 0.0f, 5.0f, "CONCRETE|WOOD|METAL|GLASS|EARTH|FABRIC", 0, 0, 0},
+    {"force", "FORCE", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 2.0f, 0.2f, 5.0f, 0, 0, 0, 0},
+    {"size", "MASS / SIZE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"hardness", "HARDNESS", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"tail", "TAIL", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"count", "CONTACTS", 1.0f, 1.0f, 20.0f, 0, 0, 0, 0},
+    {"bounce", "ELASTICITY", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"gravity", "GRAVITY", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"spin", "SPIN", 0.0f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t BOUNCR_R0[9] = {{BOUNCR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOUNCR_surface, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BOUNCR_duration, SYN_RV_RANGE, 0, 0.5f, 1.2f, 0}, {BOUNCR_count, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BOUNCR_size, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}, {BOUNCR_hardness, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {BOUNCR_bounce, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {BOUNCR_force, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}, {BOUNCR_tail, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}};
 static const syn_rv_t BOUNCR_R1[9] = {{BOUNCR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {BOUNCR_surface, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOUNCR_duration, SYN_RV_RANGE, 0, 0.5f, 1.4f, 0}, {BOUNCR_count, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BOUNCR_size, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {BOUNCR_hardness, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOUNCR_force, SYN_RV_RANGE, 0, 0.5f, 1.0f, 0}, {BOUNCR_tail, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {BOUNCR_spin, SYN_RV_RANGE, 0, 0.0f, 0.25f, 0}};
@@ -196,17 +196,17 @@ static const syn_recipe_t BOUNCR_RECIPES[8] = {
 
 enum { SWARMR_masterVolume, SWARMR_seed, SWARMR_kind, SWARMR_duration, SWARMR_count, SWARMR_speed, SWARMR_cohesion, SWARMR_agitation, SWARMR_size, SWARMR_movement, SWARMR_scatter, SWARMR_NP };
 static const syn_param_t SWARMR_P[11] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"kind", "AGENTS", 0.0f, 0.0f, 5.0f, "WINGS|CHIRPS|ROTORS|TICKS|WISPS|JETS", 0},
-    {"duration", "DURATION", 1.8f, 0.25f, 5.0f, 0, 0},
-    {"count", "POPULATION", 14.0f, 3.0f, 32.0f, 0, 1},
-    {"speed", "SPEED", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"cohesion", "COHESION", 0.3f, 0.0f, 1.0f, 0, 0},
-    {"agitation", "AGITATION", 0.25f, 0.0f, 1.0f, 0, 0},
-    {"size", "SIZE", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"movement", "FLYBY", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"scatter", "SCATTER", 0.2f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"kind", "AGENTS", 0.0f, 0.0f, 5.0f, "WINGS|CHIRPS|ROTORS|TICKS|WISPS|JETS", 0, 0, 0},
+    {"duration", "DURATION", 1.8f, 0.25f, 5.0f, 0, 0, 0, 0},
+    {"count", "POPULATION", 14.0f, 3.0f, 32.0f, 0, 1, 0, 0},
+    {"speed", "SPEED", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"cohesion", "COHESION", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"agitation", "AGITATION", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"size", "SIZE", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"movement", "FLYBY", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"scatter", "SCATTER", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t SWARMR_R0[9] = {{SWARMR_kind, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {SWARMR_duration, SYN_RV_RANGE, 0, 0.6f, 1.6f, 0}, {SWARMR_count, SYN_RV_RANGE, 0, 16.0f, 32.0f, 0}, {SWARMR_speed, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {SWARMR_cohesion, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {SWARMR_agitation, SYN_RV_RANGE, 0, 0.5f, 1.0f, 0}, {SWARMR_size, SYN_RV_RANGE, 0, 0.0f, 0.25f, 0}, {SWARMR_movement, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}, {SWARMR_scatter, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}};
 static const syn_rv_t SWARMR_R1[9] = {{SWARMR_kind, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SWARMR_duration, SYN_RV_RANGE, 0, 1.2f, 2.6f, 0}, {SWARMR_count, SYN_RV_RANGE, 0, 8.0f, 19.0f, 0}, {SWARMR_speed, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {SWARMR_cohesion, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {SWARMR_agitation, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {SWARMR_size, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {SWARMR_movement, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {SWARMR_scatter, SYN_RV_RANGE, 0, 0.25f, 0.8f, 0}};
@@ -229,17 +229,17 @@ static const syn_recipe_t SWARMR_RECIPES[8] = {
 
 enum { MACHINR_masterVolume, MACHINR_seed, MACHINR_mechanism, MACHINR_duration, MACHINR_speed, MACHINR_load, MACHINR_roughness, MACHINR_looseness, MACHINR_size, MACHINR_startTime, MACHINR_stopTime, MACHINR_NP };
 static const syn_param_t MACHINR_P[11] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"mechanism", "MECHANISM", 0.0f, 0.0f, 7.0f, "MOTOR|GEARS|SHUTTER|CLOCK|ENGINE|SERVO|TOY|DOOR", 0},
-    {"duration", "DURATION", 1.8f, 0.12f, 6.0f, 0, 0},
-    {"speed", "SPEED", 0.55f, 0.0f, 1.0f, 0, 0},
-    {"load", "LOAD", 0.25f, 0.0f, 1.0f, 0, 0},
-    {"roughness", "ROUGHNESS", 0.25f, 0.0f, 1.0f, 0, 0},
-    {"looseness", "GEAR LOOSENESS", 0.2f, 0.0f, 1.0f, 0, 0},
-    {"size", "SIZE", 0.35f, 0.0f, 1.0f, 0, 0},
-    {"startTime", "START TIME", 0.08f, 0.0f, 2.0f, 0, 0},
-    {"stopTime", "STOP TIME", 0.16f, 0.0f, 2.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"mechanism", "MECHANISM", 0.0f, 0.0f, 7.0f, "MOTOR|GEARS|SHUTTER|CLOCK|ENGINE|SERVO|TOY|DOOR", 0, 0, 0},
+    {"duration", "DURATION", 1.8f, 0.12f, 6.0f, 0, 0, 0, 0},
+    {"speed", "SPEED", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"load", "LOAD", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"roughness", "ROUGHNESS", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"looseness", "GEAR LOOSENESS", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"size", "SIZE", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"startTime", "START TIME", 0.08f, 0.0f, 2.0f, 0, 0, 0, 0},
+    {"stopTime", "STOP TIME", 0.16f, 0.0f, 2.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t MACHINR_R0[9] = {{MACHINR_mechanism, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {MACHINR_duration, SYN_RV_RANGE, 0, 0.6f, 1.8f, 0}, {MACHINR_speed, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {MACHINR_load, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {MACHINR_roughness, SYN_RV_RANGE, 0, 0.02f, 0.2f, 0}, {MACHINR_looseness, SYN_RV_RANGE, 0, 0.02f, 0.2f, 0}, {MACHINR_size, SYN_RV_RANGE, 0, 0.03f, 0.25f, 0}, {MACHINR_startTime, SYN_RV_RANGE, 0, 0.03f, 0.2f, 0}, {MACHINR_stopTime, SYN_RV_RANGE, 0, 0.08f, 0.35f, 0}};
 static const syn_rv_t MACHINR_R1[9] = {{MACHINR_mechanism, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {MACHINR_duration, SYN_RV_RANGE, 0, 1.4f, 3.7f, 0}, {MACHINR_speed, SYN_RV_RANGE, 0, 0.12f, 0.4f, 0}, {MACHINR_load, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {MACHINR_roughness, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {MACHINR_looseness, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {MACHINR_size, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {MACHINR_startTime, SYN_RV_RANGE, 0, 0.12f, 0.4f, 0}, {MACHINR_stopTime, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}};
@@ -262,19 +262,19 @@ static const syn_recipe_t MACHINR_RECIPES[8] = {
 
 enum { CRITTR_masterVolume, CRITTR_seed, CRITTR_voice, CRITTR_duration, CRITTR_pitch, CRITTR_size, CRITTR_morph, CRITTR_calls, CRITTR_gap, CRITTR_contour, CRITTR_growl, CRITTR_breath, CRITTR_flutter, CRITTR_NP };
 static const syn_param_t CRITTR_P[13] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"voice", "ANATOMY", 0.0f, 0.0f, 7.0f, "THROAT|BEAK|GILLS|CHITIN|SPIRIT|CLOCKWORK|DOG|CAT", 0},
-    {"duration", "DURATION", 1.2f, 0.15f, 5.0f, 0, 0},
-    {"pitch", "PITCH", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"size", "THROAT SIZE", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"morph", "EVOLUTION", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"calls", "CALLS", 2.0f, 1.0f, 12.0f, 0, 1},
-    {"gap", "CALL GAP", 0.2f, 0.0f, 0.85f, 0, 0},
-    {"contour", "PITCH BEND", 0.25f, -1.0f, 1.0f, 0, 0},
-    {"growl", "GROWL", 0.2f, 0.0f, 1.0f, 0, 0},
-    {"breath", "BREATH", 0.15f, 0.0f, 1.0f, 0, 0},
-    {"flutter", "FLUTTER", 0.2f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"voice", "ANATOMY", 0.0f, 0.0f, 7.0f, "THROAT|BEAK|GILLS|CHITIN|SPIRIT|CLOCKWORK|DOG|CAT", 0, 0, 0},
+    {"duration", "DURATION", 1.2f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"size", "THROAT SIZE", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"morph", "EVOLUTION", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"calls", "CALLS", 2.0f, 1.0f, 12.0f, 0, 1, 0, 0},
+    {"gap", "CALL GAP", 0.2f, 0.0f, 0.85f, 0, 0, 0, 0},
+    {"contour", "PITCH BEND", 0.25f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"growl", "GROWL", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"breath", "BREATH", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"flutter", "FLUTTER", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t CRITTR_R0[11] = {{CRITTR_voice, SYN_RV_FIXED, 0, 6.0f, 0, 0}, {CRITTR_duration, SYN_RV_RANGE, 0, 0.23f, 0.65f, 0}, {CRITTR_pitch, SYN_RV_RANGE, 0, 0.18f, 0.43f, 0}, {CRITTR_size, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}, {CRITTR_morph, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {CRITTR_calls, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {CRITTR_gap, SYN_RV_RANGE, 0, 0.06f, 0.18f, 0}, {CRITTR_contour, SYN_RV_RANGE, 0, -0.7f, -0.25f, 0}, {CRITTR_growl, SYN_RV_RANGE, 0, 0.18f, 0.5f, 0}, {CRITTR_breath, SYN_RV_RANGE, 0, 0.14f, 0.35f, 0}, {CRITTR_flutter, SYN_RV_RANGE, 0, 0.01f, 0.13f, 0}};
 static const syn_rv_t CRITTR_R1[11] = {{CRITTR_voice, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {CRITTR_duration, SYN_RV_RANGE, 0, 0.35f, 0.95f, 0}, {CRITTR_pitch, SYN_RV_RANGE, 0, 0.48f, 0.66f, 0}, {CRITTR_size, SYN_RV_RANGE, 0, 0.24f, 0.52f, 0}, {CRITTR_morph, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {CRITTR_calls, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {CRITTR_gap, SYN_RV_RANGE, 0, 0.03f, 0.14f, 0}, {CRITTR_contour, SYN_RV_RANGE, 0, -0.35f, 0.1f, 0}, {CRITTR_growl, SYN_RV_RANGE, 0, 0.01f, 0.12f, 0}, {CRITTR_breath, SYN_RV_RANGE, 0, 0.01f, 0.09f, 0}, {CRITTR_flutter, SYN_RV_RANGE, 0, 0.02f, 0.13f, 0}};
@@ -301,17 +301,17 @@ static const syn_recipe_t CRITTR_RECIPES[10] = {
 
 enum { ZAPPR_masterVolume, ZAPPR_seed, ZAPPR_duration, ZAPPR_voltage, ZAPPR_arcs, ZAPPR_branching, ZAPPR_crackle, ZAPPR_hum, ZAPPR_spark, ZAPPR_spread, ZAPPR_decay, ZAPPR_NP };
 static const syn_param_t ZAPPR_P[11] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"duration", "DURATION", 1.2f, 0.12f, 5.0f, 0, 0},
-    {"voltage", "VOLTAGE", 0.55f, 0.0f, 1.0f, 0, 0},
-    {"arcs", "ARCS", 7.0f, 1.0f, 24.0f, 0, 1},
-    {"branching", "BRANCHING", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"crackle", "CRACKLE", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"hum", "HUM", 0.2f, 0.0f, 1.0f, 0, 0},
-    {"spark", "SPARKS", 0.65f, 0.0f, 1.0f, 0, 0},
-    {"spread", "SPREAD", 0.7f, 0.0f, 1.0f, 0, 0},
-    {"decay", "DECAY", 0.4f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 1.2f, 0.12f, 5.0f, 0, 0, 0, 0},
+    {"voltage", "VOLTAGE", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"arcs", "ARCS", 7.0f, 1.0f, 24.0f, 0, 1, 0, 0},
+    {"branching", "BRANCHING", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"crackle", "CRACKLE", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"hum", "HUM", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"spark", "SPARKS", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"spread", "SPREAD", 0.7f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"decay", "DECAY", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t ZAPPR_R0[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 0.12f, 0.3f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 1.0f, 3.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.0f, 0.02f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
 static const syn_rv_t ZAPPR_R1[9] = {{ZAPPR_duration, SYN_RV_RANGE, 0, 1.3f, 2.8f, 0}, {ZAPPR_voltage, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {ZAPPR_arcs, SYN_RV_RANGE, 0, 14.0f, 24.0f, 0}, {ZAPPR_branching, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {ZAPPR_crackle, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {ZAPPR_hum, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {ZAPPR_spark, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {ZAPPR_spread, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {ZAPPR_decay, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}};
@@ -334,19 +334,19 @@ static const syn_recipe_t ZAPPR_RECIPES[8] = {
 
 enum { SIGNLR_masterVolume, SIGNLR_seed, SIGNLR_encoding, SIGNLR_duration, SIGNLR_carrier, SIGNLR_deviation, SIGNLR_symbols, SIGNLR_packets, SIGNLR_gap, SIGNLR_drift, SIGNLR_corruption, SIGNLR_interference, SIGNLR_echo, SIGNLR_NP };
 static const syn_param_t SIGNLR_P[13] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"encoding", "ENCODING", 0.0f, 0.0f, 4.0f, "FSK|PHASE|CHIRP|RADIO|PING", 0},
-    {"duration", "DURATION", 1.4f, 0.15f, 5.0f, 0, 0},
-    {"carrier", "CARRIER", 0.55f, 0.0f, 1.0f, 0, 0},
-    {"deviation", "DEVIATION", 0.35f, 0.0f, 1.0f, 0, 0},
-    {"symbols", "SYMBOL RATE", 0.4f, 0.0f, 1.0f, 0, 0},
-    {"packets", "PACKETS", 3.0f, 1.0f, 12.0f, 0, 1},
-    {"gap", "PACKET GAP", 0.25f, 0.0f, 0.85f, 0, 0},
-    {"drift", "DRIFT", 0.0f, -1.0f, 1.0f, 0, 0},
-    {"corruption", "CORRUPTION", 0.08f, 0.0f, 1.0f, 0, 0},
-    {"interference", "INTERFERENCE", 0.08f, 0.0f, 1.0f, 0, 0},
-    {"echo", "ECHO", 0.15f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"encoding", "ENCODING", 0.0f, 0.0f, 4.0f, "FSK|PHASE|CHIRP|RADIO|PING", 0, 0, 0},
+    {"duration", "DURATION", 1.4f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"carrier", "CARRIER", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"deviation", "DEVIATION", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"symbols", "SYMBOL RATE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"packets", "PACKETS", 3.0f, 1.0f, 12.0f, 0, 1, 0, 0},
+    {"gap", "PACKET GAP", 0.25f, 0.0f, 0.85f, 0, 0, 0, 0},
+    {"drift", "DRIFT", 0.0f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"corruption", "CORRUPTION", 0.08f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"interference", "INTERFERENCE", 0.08f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"echo", "ECHO", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t SIGNLR_R0[10] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.45f, 0.7f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.04f, 0.3f, 0}, {SIGNLR_packets, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.5f, 0.8f, 0}, {SIGNLR_drift, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_interference, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_corruption, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.08f, 0.3f, 0}};
 static const syn_rv_t SIGNLR_R1[10] = {{SIGNLR_encoding, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SIGNLR_duration, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {SIGNLR_carrier, SYN_RV_RANGE, 0, 0.6f, 0.85f, 0}, {SIGNLR_deviation, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {SIGNLR_packets, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {SIGNLR_gap, SYN_RV_RANGE, 0, 0.65f, 0.82f, 0}, {SIGNLR_drift, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {SIGNLR_interference, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_corruption, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SIGNLR_echo, SYN_RV_RANGE, 0, 0.05f, 0.2f, 0}};
@@ -373,21 +373,21 @@ static const syn_recipe_t SIGNLR_RECIPES[10] = {
 
 enum { PLUCKR_masterVolume, PLUCKR_seed, PLUCKR_material, PLUCKR_duration, PLUCKR_pitch, PLUCKR_strings, PLUCKR_damping, PLUCKR_brightness, PLUCKR_pluck, PLUCKR_coupling, PLUCKR_strum, PLUCKR_tremolo, PLUCKR_vibrato, PLUCKR_tremoloRate, PLUCKR_inharmonic, PLUCKR_NP };
 static const syn_param_t PLUCKR_P[15] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"material", "STRING", 0.0f, 0.0f, 4.0f, "NYLON|STEEL|GUT|RUBBER|GLASS", 0},
-    {"duration", "DURATION", 1.8f, 0.15f, 5.0f, 0, 0},
-    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"strings", "STRINGS", 3.0f, 1.0f, 8.0f, 0, 1},
-    {"damping", "DAMPING", 0.25f, 0.0f, 1.0f, 0, 0},
-    {"brightness", "BRIGHTNESS", 0.6f, 0.0f, 1.0f, 0, 0},
-    {"pluck", "PLUCK POINT", 0.3f, 0.0f, 1.0f, 0, 0},
-    {"coupling", "COUPLING", 0.15f, 0.0f, 1.0f, 0, 0},
-    {"strum", "STRUM", 0.2f, 0.0f, 1.0f, 0, 0},
-    {"tremolo", "TREMOLO VOLUME", 0.0f, 0.0f, 1.0f, 0, 0},
-    {"vibrato", "VIBRATO PITCH", 0.0f, 0.0f, 1.0f, 0, 0},
-    {"tremoloRate", "MOTION SPEED", 4.0f, 0.2f, 12.0f, 0, 0},
-    {"inharmonic", "LOOSE TUNING", 0.05f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"material", "STRING", 0.0f, 0.0f, 4.0f, "NYLON|STEEL|GUT|RUBBER|GLASS", 0, 0, 0},
+    {"duration", "DURATION", 1.8f, 0.15f, 5.0f, 0, 0, 0, 0},
+    {"pitch", "PITCH", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"strings", "STRINGS", 3.0f, 1.0f, 8.0f, 0, 1, 0, 0},
+    {"damping", "DAMPING", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"brightness", "BRIGHTNESS", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"pluck", "PLUCK POINT", 0.3f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"coupling", "COUPLING", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"strum", "STRUM", 0.2f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"tremolo", "TREMOLO VOLUME", 0.0f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"vibrato", "VIBRATO PITCH", 0.0f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"tremoloRate", "MOTION SPEED", 4.0f, 0.2f, 12.0f, 0, 0, 0, 0},
+    {"inharmonic", "LOOSE TUNING", 0.05f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const float PLUCKR_R0_material[2] = {0.0f, 2.0f};
 static const syn_rv_t PLUCKR_R0[10] = {{PLUCKR_material, SYN_RV_PICK, 2, 0, 0, PLUCKR_R0_material}, {PLUCKR_duration, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {PLUCKR_pitch, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {PLUCKR_strings, SYN_RV_RANGE, 0, 3.0f, 6.0f, 0}, {PLUCKR_damping, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {PLUCKR_brightness, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {PLUCKR_pluck, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {PLUCKR_coupling, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {PLUCKR_strum, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {PLUCKR_inharmonic, SYN_RV_RANGE, 0, 0.01f, 0.08f, 0}};
@@ -416,17 +416,17 @@ static const syn_recipe_t PLUCKR_RECIPES[8] = {
 
 enum { RUSTLR_masterVolume, RUSTLR_seed, RUSTLR_material, RUSTLR_gesture, RUSTLR_duration, RUSTLR_grain, RUSTLR_density, RUSTLR_motion, RUSTLR_pressure, RUSTLR_folds, RUSTLR_brightness, RUSTLR_NP };
 static const syn_param_t RUSTLR_P[11] = {
-    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"material", "MATERIAL", 0.0f, 0.0f, 5.0f, "PAPER|CLOTH|LEATHER|PLASTIC|FOIL|ZIP", 0},
-    {"gesture", "GESTURE", 1.0f, 0.0f, 3.0f, "FLICK|TURN|SLIDE|CRUMPLE", 0},
-    {"duration", "DURATION", 0.65f, 0.08f, 3.0f, 0, 0},
-    {"grain", "GRAIN", 0.45f, 0.0f, 1.0f, 0, 0},
-    {"density", "DENSITY", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"motion", "MOTION", 0.0f, -1.0f, 1.0f, 0, 0},
-    {"pressure", "PRESSURE", 0.5f, 0.0f, 1.0f, 0, 0},
-    {"folds", "FOLDS", 3.0f, 1.0f, 12.0f, 0, 1},
-    {"brightness", "BRIGHTNESS", 0.5f, 0.0f, 1.0f, 0, 0},
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"material", "MATERIAL", 0.0f, 0.0f, 5.0f, "PAPER|CLOTH|LEATHER|PLASTIC|FOIL|ZIP", 0, 0, 0},
+    {"gesture", "GESTURE", 1.0f, 0.0f, 3.0f, "FLICK|TURN|SLIDE|CRUMPLE", 0, 0, 0},
+    {"duration", "DURATION", 0.65f, 0.08f, 3.0f, 0, 0, 0, 0},
+    {"grain", "GRAIN", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"density", "DENSITY", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"motion", "MOTION", 0.0f, -1.0f, 1.0f, 0, 0, 0, 0},
+    {"pressure", "PRESSURE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"folds", "FOLDS", 3.0f, 1.0f, 12.0f, 0, 1, 0, 0},
+    {"brightness", "BRIGHTNESS", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
 };
 static const syn_rv_t RUSTLR_R0[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.12f, 0.24f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.12f, 0.36f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.4f, 0.2f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 1.0f, 2.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.52f, 0.85f, 0}};
 static const syn_rv_t RUSTLR_R1[9] = {{RUSTLR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {RUSTLR_gesture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {RUSTLR_duration, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {RUSTLR_grain, SYN_RV_RANGE, 0, 0.35f, 0.68f, 0}, {RUSTLR_density, SYN_RV_RANGE, 0, 0.5f, 0.83f, 0}, {RUSTLR_motion, SYN_RV_RANGE, 0, -0.25f, 0.45f, 0}, {RUSTLR_pressure, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {RUSTLR_folds, SYN_RV_RANGE, 0, 2.0f, 4.0f, 0}, {RUSTLR_brightness, SYN_RV_RANGE, 0, 0.38f, 0.7f, 0}};
@@ -451,20 +451,179 @@ static const syn_recipe_t RUSTLR_RECIPES[8] = {
     {"ZIP POUCH", RUSTLR_R7, 9},
 };
 
+enum { SQUISHR_masterVolume, SQUISHR_seed, SQUISHR_texture, SQUISHR_viscosity, SQUISHR_stretch, SQUISHR_pressure, SQUISHR_wetness, SQUISHR_bubbleSize, SQUISHR_duration, SQUISHR_NP };
+static const syn_param_t SQUISHR_P[9] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"texture", "TEXTURE", 0.0f, 0.0f, 5.0f, "SLIME|BUBBLES|SUCTION|SPLAT|GULP|SPRING", 0, 0, 0},
+    {"viscosity", "VISCOSITY", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"stretch", "STRETCH", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"pressure", "PRESSURE", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"wetness", "WETNESS", 0.75f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"bubbleSize", "BUBBLE SIZE", 0.55f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 0.65f, 0.1f, 3.0f, 0, 0, 0, 0},
+};
+static const syn_rv_t SQUISHR_R0[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.28f, 0.55f, 0}};
+static const syn_rv_t SQUISHR_R1[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.02f, 0.25f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.1f, 0.2f, 0}};
+static const syn_rv_t SQUISHR_R2[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.45f, 0.7f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}};
+static const syn_rv_t SQUISHR_R3[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.02f, 0.25f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.18f, 0.4f, 0}};
+static const syn_rv_t SQUISHR_R4[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.2f, 0.45f, 0}};
+static const syn_rv_t SQUISHR_R5[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.45f, 0.95f, 0}};
+static const syn_rv_t SQUISHR_R6[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.2f, 0.65f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 1.4f, 2.7f, 0}};
+static const syn_rv_t SQUISHR_R7[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.9f, 1.8f, 0}};
+static const syn_rv_t SQUISHR_R8[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.02f, 0.25f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.02f, 0.15f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.02f, 0.25f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.1f, 0.18f, 0}};
+static const syn_rv_t SQUISHR_R9[7] = {{SQUISHR_texture, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {SQUISHR_viscosity, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {SQUISHR_stretch, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {SQUISHR_pressure, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {SQUISHR_wetness, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {SQUISHR_bubbleSize, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {SQUISHR_duration, SYN_RV_RANGE, 0, 0.8f, 1.5f, 0}};
+static const syn_recipe_t SQUISHR_RECIPES[10] = {
+    {"SLIME STEP", SQUISHR_R0, 7},
+    {"BUBBLE POP", SQUISHR_R1, 7},
+    {"SUCTION CUP", SQUISHR_R2, 7},
+    {"WET SPLAT", SQUISHR_R3, 7},
+    {"GULP", SQUISHR_R4, 7},
+    {"SPRINGY GOO", SQUISHR_R5, 7},
+    {"BUBBLING POTION", SQUISHR_R6, 7},
+    {"MUD PULL", SQUISHR_R7, 7},
+    {"WATER DROP", SQUISHR_R8, 7},
+    {"JELLY WOBBLE", SQUISHR_R9, 7},
+};
+
+enum { CLONKR_masterVolume, CLONKR_seed, CLONKR_material, CLONKR_action, CLONKR_size, CLONKR_hollowness, CLONKR_hardness, CLONKR_damping, CLONKR_duration, CLONKR_NP };
+static const syn_param_t CLONKR_P[9] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"material", "MATERIAL", 0.0f, 0.0f, 4.0f, "WOOD|GLASS|METAL|CERAMIC|RUBBER", 0, 0, 0},
+    {"action", "CONTACT", 0.0f, 0.0f, 2.0f, "HIT|SCRAPE|RATTLE", 0, 0, 0},
+    {"size", "SIZE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"hollowness", "HOLLOWNESS", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"hardness", "STRIKE HARDNESS", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"damping", "DAMPING", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 0.7f, 0.1f, 2.0f, 0, 0, 0, 0},
+};
+static const syn_rv_t CLONKR_R0[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.18f, 0.32f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.55f, 0.8f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.1f, 0.32f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.45f, 0.9f, 0}};
+static const syn_rv_t CLONKR_R1[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.05f, 0.23f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.25f, 0.65f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.05f, 0.24f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.5f, 1.15f, 0}};
+static const syn_rv_t CLONKR_R2[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.36f, 0.68f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.35f, 0.72f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}};
+static const float CLONKR_R3_action[2] = {1.0f, 2.0f};
+static const syn_rv_t CLONKR_R3[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_action, SYN_RV_PICK, 2, 0, 0, CLONKR_R3_action}, {CLONKR_size, SYN_RV_RANGE, 0, 0.78f, 1.0f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.6f, 0.95f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.16f, 0.38f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 1.2f, 2.0f, 0}};
+static const syn_rv_t CLONKR_R4[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.38f, 0.68f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.05f, 0.4f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.7f, 1.5f, 0}};
+static const syn_rv_t CLONKR_R5[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.08f, 0.4f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.68f, 0.95f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.12f, 0.32f, 0}};
+static const syn_rv_t CLONKR_R6[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.3f, 0.8f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.08f, 0.35f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.35f, 0.8f, 0}};
+static const syn_rv_t CLONKR_R7[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.18f, 0.4f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.0f, 0.25f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.48f, 0.8f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.45f, 1.0f, 0}};
+static const syn_rv_t CLONKR_R8[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.65f, 1.6f, 0}};
+static const syn_rv_t CLONKR_R9[7] = {{CLONKR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_action, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {CLONKR_size, SYN_RV_RANGE, 0, 0.03f, 0.16f, 0}, {CLONKR_hollowness, SYN_RV_RANGE, 0, 0.0f, 0.25f, 0}, {CLONKR_hardness, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {CLONKR_damping, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {CLONKR_duration, SYN_RV_RANGE, 0, 0.22f, 0.52f, 0}};
+static const syn_recipe_t CLONKR_RECIPES[10] = {
+    {"TEACUP", CLONKR_R0, 7},
+    {"GLASS PING", CLONKR_R1, 7},
+    {"WOOD KNOCK", CLONKR_R2, 7},
+    {"DUNGEON GATE", CLONKR_R3, 7},
+    {"METAL CLANG", CLONKR_R4, 7},
+    {"CERAMIC CRACK", CLONKR_R5, 7},
+    {"RUBBER THUD", CLONKR_R6, 7},
+    {"LOOSE BOLTS", CLONKR_R7, 7},
+    {"DRAGGED CRATE", CLONKR_R8, 7},
+    {"COIN DROP", CLONKR_R9, 7},
+};
+
+enum { BOOMR_masterVolume, BOOMR_seed, BOOMR_duration, BOOMR_size, BOOMR_pressure, BOOMR_blast, BOOMR_debris, BOOMR_gas, BOOMR_aftershock, BOOMR_rubbleSize, BOOMR_spread, BOOMR_tail, BOOMR_muffle, BOOMR_mechanism, BOOMR_space, BOOMR_NP };
+static const syn_param_t BOOMR_P[15] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"duration", "DURATION", 1.5f, 0.12f, 5.0f, 0, 0, 0, 0},
+    {"size", "SIZE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"pressure", "PRESSURE", 0.7f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"blast", "BLAST", 0.65f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"debris", "DEBRIS", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"gas", "GAS", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"aftershock", "AFTERSHOCK", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"rubbleSize", "RUBBLE SIZE", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"spread", "SCATTER", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"tail", "AFTERMATH", 0.45f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"muffle", "MUFFLE", 0.15f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"mechanism", "EXPLOSION", 0.0f, 0.0f, 7.0f, "DETONATION|FUEL|UNDERWATER|IMPACT|COLLAPSE|POP|GAS RUPTURE|IMPLOSION", 0, 0, 0},
+    {"space", "SPACE", 0.25f, 0.0f, 1.0f, 0, 0, 0, 0},
+};
+static const syn_rv_t BOOMR_R0[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.03f, 0.15f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.05f, 0.22f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.05f, 0.35f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.08f, 0.35f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 0.65f, 1.5f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.03f, 0.25f, 0}};
+static const syn_rv_t BOOMR_R1[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.25f, 0.55f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 1.0f, 2.0f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.15f, 0.55f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}};
+static const syn_rv_t BOOMR_R2[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 0.7f, 1.6f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.05f, 0.3f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.0f, 0.18f, 0}};
+static const syn_rv_t BOOMR_R3[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.0f, 0.04f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.4f, 0.85f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 1.8f, 3.6f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}};
+static const syn_rv_t BOOMR_R4[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.02f, 0.15f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 1.3f, 2.8f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.02f, 0.22f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.2f, 0.55f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}};
+static const syn_rv_t BOOMR_R5[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 2.2f, 4.5f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.75f, 1.0f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}};
+static const syn_rv_t BOOMR_R6[13] = {{BOOMR_gas, SYN_RV_RANGE, 0, 0.08f, 0.22f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 4.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 1.6f, 3.8f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.65f, 0.95f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.65f, 0.9f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.4f, 0.7f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}};
+static const syn_rv_t BOOMR_R7[13] = {{BOOMR_gas, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOOMR_aftershock, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {BOOMR_mechanism, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 0.12f, 0.35f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.55f, 0.85f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.0f, 0.25f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.0f, 0.18f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const syn_rv_t BOOMR_R8[13] = {{BOOMR_mechanism, SYN_RV_FIXED, 0, 6.0f, 0, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 1.3f, 3.4f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {BOOMR_gas, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.0f, 0.08f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.02f, 0.2f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.4f, 0.8f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.0f, 0.2f, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}};
+static const syn_rv_t BOOMR_R9[13] = {{BOOMR_mechanism, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 0.8f, 2.1f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.2f, 0.45f, 0}, {BOOMR_gas, SYN_RV_RANGE, 0, 0.03f, 0.12f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.15f, 0.4f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.25f, 0.5f, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}};
+static const syn_rv_t BOOMR_R10[13] = {{BOOMR_mechanism, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {BOOMR_duration, SYN_RV_RANGE, 0, 2.0f, 4.5f, 0}, {BOOMR_size, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {BOOMR_pressure, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {BOOMR_blast, SYN_RV_RANGE, 0, 0.03f, 0.15f, 0}, {BOOMR_gas, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {BOOMR_aftershock, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_debris, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {BOOMR_rubbleSize, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {BOOMR_spread, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {BOOMR_tail, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {BOOMR_muffle, SYN_RV_RANGE, 0, 0.65f, 0.9f, 0}, {BOOMR_space, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}};
+static const syn_recipe_t BOOMR_RECIPES[11] = {
+    {"GRENADE", BOOMR_R0, 13},
+    {"BARREL", BOOMR_R1, 13},
+    {"ROCKET", BOOMR_R2, 13},
+    {"DEPTH CHARGE", BOOMR_R3, 13},
+    {"FIREBALL", BOOMR_R4, 13},
+    {"METEOR", BOOMR_R5, 13},
+    {"DEMOLITION", BOOMR_R6, 13},
+    {"TINY POP", BOOMR_R7, 13},
+    {"GAS TANK", BOOMR_R8, 13},
+    {"IMPLOSION", BOOMR_R9, 13},
+    {"DISTANT CHARGE", BOOMR_R10, 13},
+};
+
+enum { FRACTR_masterVolume, FRACTR_seed, FRACTR_material, FRACTR_duration, FRACTR_fragments, FRACTR_fragmentSize, FRACTR_spread, FRACTR_decay, FRACTR_gravity, FRACTR_bounce, FRACTR_stress, FRACTR_shards, FRACTR_fracture, FRACTR_NP };
+static const int8_t FRACTR_V_material[7] = {0, 1, 2, 3, 5, 6, 7};
+static const syn_param_t FRACTR_P[13] = {
+    {"masterVolume", "VOLUME", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"seed", "VARIATION", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"material", "MATERIAL", 0.0f, 0.0f, 7.0f, "GLASS|ICE|CRYSTAL|STONE|ARMOR|BONE|BISCUIT", 0, FRACTR_V_material, 7},
+    {"duration", "DURATION", 1.8f, 0.15f, 6.0f, 0, 0, 0, 0},
+    {"fragments", "FRAGMENTS", 32.0f, 3.0f, 96.0f, 0, 1, 0, 0},
+    {"fragmentSize", "FRAGMENT SIZE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"spread", "SPREAD", 0.6f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"decay", "DECAY", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"gravity", "GRAVITY", 0.5f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"bounce", "BOUNCE", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"stress", "STRESS", 0.4f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"shards", "SHARDS", 0.35f, 0.0f, 1.0f, 0, 0, 0, 0},
+    {"fracture", "FRACTURE", 0.75f, 0.0f, 1.0f, 0, 0, 0, 0},
+};
+static const syn_rv_t FRACTR_R0[11] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 1.1f, 2.6f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 30.0f, 72.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.18f, 0.46f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.35f, 0.7f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.45f, 0.8f, 0}};
+static const syn_rv_t FRACTR_R1[10] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 1.6f, 3.1f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 20.0f, 50.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.5f, 0.85f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.55f, 0.95f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.3f, 0.6f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.2f, 0.6f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.2f, 0.5f, 0}};
+static const syn_rv_t FRACTR_R2[11] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.1f, 0.3f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.45f, 0.85f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 2.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 1.2f, 3.2f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 8.0f, 28.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.1f, 0.45f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.12f, 0.4f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.1f, 0.4f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}};
+static const syn_rv_t FRACTR_R3[11] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.6f, 1.0f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 3.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 2.2f, 4.6f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 40.0f, 96.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.55f, 1.0f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.25f, 0.7f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}};
+static const syn_rv_t FRACTR_R4[10] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 5.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 0.55f, 1.5f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 7.0f, 24.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.35f, 0.75f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.08f, 0.35f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.18f, 0.48f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.55f, 1.0f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.5f, 0.9f, 0}};
+static const syn_rv_t FRACTR_R5[11] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.1f, 0.5f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.85f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.04f, 0.16f, 0}, {FRACTR_material, SYN_RV_FIXED, 0, 6.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 0.22f, 0.48f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 3.0f, 8.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.01f, 0.09f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.03f, 0.14f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const float FRACTR_R6_material[2] = {0.0f, 2.0f};
+static const syn_rv_t FRACTR_R6[10] = {{FRACTR_stress, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.35f, 0.65f, 0}, {FRACTR_material, SYN_RV_PICK, 2, 0, 0, FRACTR_R6_material}, {FRACTR_duration, SYN_RV_RANGE, 0, 3.0f, 5.5f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 18.0f, 46.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.15f, 0.5f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.65f, 1.0f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.08f, 0.3f, 0}};
+static const syn_rv_t FRACTR_R7[11] = {{FRACTR_material, SYN_RV_FIXED, 0, 0.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 0.18f, 0.4f, 0}, {FRACTR_stress, SYN_RV_RANGE, 0, 0.05f, 0.25f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.03f, 0.12f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 3.0f, 9.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.1f, 0.35f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.01f, 0.06f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.02f, 0.12f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.0f, 0.15f, 0}};
+static const syn_rv_t FRACTR_R8[11] = {{FRACTR_material, SYN_RV_FIXED, 0, 1.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 0.3f, 0.65f, 0}, {FRACTR_stress, SYN_RV_RANGE, 0, 0.3f, 0.7f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.04f, 0.18f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 3.0f, 10.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.55f, 0.9f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.03f, 0.15f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.08f, 0.2f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.6f, 0.9f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.0f, 0.1f, 0}};
+static const syn_rv_t FRACTR_R9[11] = {{FRACTR_material, SYN_RV_FIXED, 0, 7.0f, 0, 0}, {FRACTR_duration, SYN_RV_RANGE, 0, 0.22f, 0.5f, 0}, {FRACTR_stress, SYN_RV_RANGE, 0, 0.15f, 0.45f, 0}, {FRACTR_fracture, SYN_RV_RANGE, 0, 0.8f, 1.0f, 0}, {FRACTR_shards, SYN_RV_RANGE, 0, 0.03f, 0.12f, 0}, {FRACTR_fragments, SYN_RV_RANGE, 0, 8.0f, 24.0f, 0}, {FRACTR_fragmentSize, SYN_RV_RANGE, 0, 0.25f, 0.6f, 0}, {FRACTR_spread, SYN_RV_RANGE, 0, 0.03f, 0.13f, 0}, {FRACTR_decay, SYN_RV_RANGE, 0, 0.02f, 0.12f, 0}, {FRACTR_gravity, SYN_RV_RANGE, 0, 0.7f, 1.0f, 0}, {FRACTR_bounce, SYN_RV_RANGE, 0, 0.0f, 0.12f, 0}};
+static const syn_recipe_t FRACTR_RECIPES[10] = {
+    {"GLASS CASCADE", FRACTR_R0, 11},
+    {"ICE WALL", FRACTR_R1, 10},
+    {"CRYSTAL BREAK", FRACTR_R2, 11},
+    {"STONE COLLAPSE", FRACTR_R3, 11},
+    {"BRITTLE ARMOR", FRACTR_R4, 10},
+    {"BONE SNAP", FRACTR_R5, 11},
+    {"SHATTER FREEZE", FRACTR_R6, 10},
+    {"GLASS SNAP", FRACTR_R7, 11},
+    {"ICE CRACK", FRACTR_R8, 11},
+    {"BISCUIT CRUNCH", FRACTR_R9, 11},
+};
+
 /* the synths, in this order on the FM-1 (after the classic Bfxr, synth 0) */
-#define SYN_NPRESET 12u
+#define SYN_NPRESET 16u
 const uint8_t SYN_N = SYN_NPRESET;
 const syn_info_t SYN_INFO[SYN_NPRESET] = {
-    {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES},
-    {"CHOIRR", "Choirr", 11, CHOIRR_P, 8, CHOIRR_RECIPES},
-    {"BREATHR", "Breathr", 14, BREATHR_P, 12, BREATHR_RECIPES},
-    {"BIRDR", "Birdr", 16, BIRDR_P, 10, BIRDR_RECIPES},
-    {"BOUNCR", "Bouncr", 13, BOUNCR_P, 8, BOUNCR_RECIPES},
-    {"SWARMR", "Swarmr", 11, SWARMR_P, 8, SWARMR_RECIPES},
-    {"MACHINR", "Machinr", 11, MACHINR_P, 8, MACHINR_RECIPES},
-    {"CRITTR", "Crittr", 13, CRITTR_P, 10, CRITTR_RECIPES},
-    {"ZAPPR", "Zappr", 11, ZAPPR_P, 8, ZAPPR_RECIPES},
-    {"SIGNLR", "Signlr", 13, SIGNLR_P, 10, SIGNLR_RECIPES},
-    {"PLUCKR", "Pluckr", 15, PLUCKR_P, 8, PLUCKR_RECIPES},
-    {"RUSTLR", "Rustlr", 11, RUSTLR_P, 8, RUSTLR_RECIPES},
+    {"WHOOSHR", "Whooshr", 9, WHOOSHR_P, 8, WHOOSHR_RECIPES, 0},
+    {"CHOIRR", "Choirr", 11, CHOIRR_P, 8, CHOIRR_RECIPES, 0},
+    {"BREATHR", "Breathr", 14, BREATHR_P, 12, BREATHR_RECIPES, 0},
+    {"BIRDR", "Birdr", 16, BIRDR_P, 10, BIRDR_RECIPES, 1},
+    {"BOUNCR", "Bouncr", 13, BOUNCR_P, 8, BOUNCR_RECIPES, 0},
+    {"SWARMR", "Swarmr", 11, SWARMR_P, 8, SWARMR_RECIPES, 0},
+    {"MACHINR", "Machinr", 11, MACHINR_P, 8, MACHINR_RECIPES, 0},
+    {"CRITTR", "Crittr", 13, CRITTR_P, 10, CRITTR_RECIPES, 2},
+    {"ZAPPR", "Zappr", 11, ZAPPR_P, 8, ZAPPR_RECIPES, 0},
+    {"SIGNLR", "Signlr", 13, SIGNLR_P, 10, SIGNLR_RECIPES, 0},
+    {"PLUCKR", "Pluckr", 15, PLUCKR_P, 8, PLUCKR_RECIPES, 0},
+    {"RUSTLR", "Rustlr", 11, RUSTLR_P, 8, RUSTLR_RECIPES, 0},
+    {"SQUISHR", "Squishr", 9, SQUISHR_P, 10, SQUISHR_RECIPES, 0},
+    {"CLONKR", "Clonkr", 9, CLONKR_P, 10, CLONKR_RECIPES, 0},
+    {"BOOMR", "Boomr", 15, BOOMR_P, 11, BOOMR_RECIPES, 1},
+    {"FRACTR", "Fractr", 13, FRACTR_P, 10, FRACTR_RECIPES, 1},
 };

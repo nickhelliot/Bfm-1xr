@@ -2,8 +2,8 @@
 
 BFMXR turns the FM-1 into [bfxr.net](https://www.bfxr.net)'s sound-effect maker: coins, lasers, explosions, power-ups,
 hits, jumps and blips, made the way bfxr.net makes them and played from the keys. Press **ENV** for bfxr.net's other
-synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines, critters, zaps, signals, plucks and rustles,
-each on its own screen.
+synths too: whooshes, choirs, breaths, birds, bounces, swarms, machines, critters, zaps, signals, plucks, rustles,
+squishes, clonks, booms and breaks, each on its own screen.
 
 ![The BFMXR screen](docs/screen.png)
 
@@ -108,6 +108,10 @@ the menu without changing anything. ENV is lit while you're on a synth other tha
 | **SIGNLR** | Radio and data signals: beeps, chirps, packets, sonar pings |
 | **PLUCKR** | Plucked strings: nylon, steel, gut, rubber, glass |
 | **RUSTLR** | Paper, cloth, leather, plastic, foil and zips |
+| **SQUISHR** | Slime, bubbles, suction, splats, gulps, springs |
+| **CLONKR** | Things hit, scraped or rattled: wood, glass, metal, ceramic, rubber |
+| **BOOMR** | Explosions: grenades, barrels, depth charges, collapses, pops, gas, implosions |
+| **FRACTR** | Breaking: glass, ice, crystal, stone, armor, bone, biscuit |
 
 On another synth's screen the controls work as on Bfxr's, with that synth's own buttons and sliders:
 
@@ -242,8 +246,9 @@ result).
 The other synths are bfxr2's, each rewritten to run on the FM-1 (in single precision, and a block at a time so a
 sound can be made while the FM-1 keeps running). `tools/check_synths.c` makes every one of bfxr2's own sounds for
 them (three takes of each button) and compares them with bfxr2's: most match to 60 dB or better below the sound. A
-few takes of Swarmr and Machinr part ways with bfxr2 midway, where a rounding difference moves a tick or a gear tooth
-by one sample and the noise after it is a different take of the same sound. Up to 2.5 seconds the FM-1 keeps a sound
+few takes of Swarmr, Machinr, Zappr, Rustlr and Fractr part ways with bfxr2 midway, where a rounding difference moves a
+tick, a gear tooth, a spark or a shard's bounce by one sample and the noise after it is a different take of the same
+sound. Up to 2.5 seconds the FM-1 keeps a sound
 at 16 bits; longer sounds are kept at 8 bits (µ-law), which adds a little hiss.
 
 ## Build it yourself

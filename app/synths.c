@@ -106,13 +106,24 @@ COLD void syn_recipe(const syn_info_t *sy, float *p, uint32_t r, syn_rng_t *rng)
 
 COLD void syn_randomize(const syn_info_t *sy, float *p, syn_rng_t *rng)
 {
+    if (sy->randomize && sy->nr) {               /* bfxr2's own: one of the recipes at random */
+        syn_recipe(sy, p, (uint32_t)(syn_rnd(rng) * (float)sy->nr), rng);
+        if (sy->randomize == 2) {                /* (Crittr: a one-shot explorer, kept short) */
+            int k = syn_find(sy, "duration");
+            if (k >= 0 && p[k] > 1.5f)
+                syn_set(sy, p, (uint32_t)k, 0.55f + syn_rnd(rng) * 0.85f);
+        }
+        return;
+    }
     reset_unlocked(sy, p);
     for (uint32_t k = 0; k < sy->np; k++) {
         const syn_param_t *d = &sy->p[k];
         float x;
         if (locked(sy, k))
             continue;
-        if (d->choices) {                        /* one of the choices, each as likely */
+        if (d->choices && d->values) {           /* one of the choices, each as likely */
+            x = (float)d->values[(uint32_t)(syn_rnd(rng) * (float)d->nvalues) % d->nvalues];
+        } else if (d->choices) {
             float n = d->max - d->min + 1.0f;
             x = d->min + fm_floorf(syn_rnd(rng) * n);
             if (x > d->max)
@@ -142,22 +153,47 @@ COLD int syn_find(const syn_info_t *sy, const char *key)
     return -1;
 }
 
-COLD int syn_choices(const syn_param_t *d, uint32_t v, char *out, uint32_t cap)
+static int choice_index(const syn_param_t *d, float v)  /* v's place among the choices, -1: none */
+{
+    int32_t x = (int32_t)fm_floorf(v + 0.5f);
+    uint32_t n = d->values ? d->nvalues : (uint32_t)(d->max - d->min + 1.5f);
+    for (uint32_t i = 0; i < n; i++)
+        if ((d->values ? (int32_t)d->values[i] : (int32_t)d->min + (int32_t)i) == x)
+            return (int)i;
+    return -1;
+}
+
+COLD int syn_choices(const syn_param_t *d, float v, char *out, uint32_t cap)
 {
     const char *c = d->choices;
+    int at = choice_index(d, v);
     uint32_t i = 0, n = 0;
-    if (!c || !cap)
+    if (!c || !cap || at < 0)
         return 0;
-    while (*c && n < v) {                        /* to the v-th name */
+    while (*c && n < (uint32_t)at) {             /* to its name */
         if (*c++ == '|')
             n++;
     }
-    if (n != v || !*c)
+    if (n != (uint32_t)at || !*c)
         return 0;
     while (*c && *c != '|' && i + 1 < cap)
         out[i++] = *c++;
     out[i] = 0;
     return 1;
+}
+
+COLD float syn_choice_step(const syn_param_t *d, float v, int32_t dir)
+{
+    int at = choice_index(d, v);
+    int32_t n = d->values ? d->nvalues : (int32_t)(d->max - d->min + 1.5f), j;
+    if (at < 0) {                                /* (a value with no button, as Fractr's Pixel: the nearest one) */
+        for (j = 0; j < n && (d->values ? (float)d->values[j] : d->min + (float)j) < v; j++)
+            ;
+        at = dir > 0 ? j - 1 : j;
+    }
+    j = at + (dir > 0 ? 1 : -1);
+    j = j < 0 ? 0 : j >= n ? n - 1 : j;
+    return d->values ? (float)d->values[j] : d->min + (float)j;
 }
 
 /* Math.round(duration * 44100) exactly, as bfxr2 works it out in double: the float's mantissa times 44100, in two
@@ -1690,7 +1726,9 @@ static void pluckr_run(void *st, float *out, uint32_t n)
                 g->wave_out[sg] = nx;
                 d = nx;
             }
-            k->buf[g->off + g->index] = g->feedback * (d * (1.0f - k->coupling * 0.025f) + k->bridge * k->coupling * 0.025f);
+            k->buf[g->off + g->index] =                    /* (flushed: a dying string never goes denormal, slow) */
+                fm_flush(g->feedback * (d * (1.0f - k->coupling * 0.025f) + k->bridge * k->coupling * 0.025f));
+            g->low = fm_flush(g->low);
             if (++g->index == g->delay)
                 g->index = 0;
             sum += cur;
@@ -1926,6 +1964,886 @@ static void rustlr_run(void *st, float *out, uint32_t n)
     }
 }
 
+static uint32_t ceil_u(float x) { float f = fm_floorf(x); return (uint32_t)(f < x ? f + 1.0f : f); }
+
+/* ---- Squishr: chirped bubble resonances and pressure-driven filtered noise, each gesture its own timing ---- */
+#define SQ_MAXE 64
+typedef struct { uint32_t start, len; float freq, strength, phase; } squishr_bubble_t;
+typedef struct {
+    syn_rng_t rng;
+    uint32_t i, length, texture, nev;
+    float viscosity, stretch, pressure, wetness, duration, release, base, amplitude, filter;
+    float low_noise, smooth_noise, previous;
+    ff_t body_phase;                     /* in turns */
+    squishr_bubble_t ev[SQ_MAXE];
+} squishr_t;
+
+static COLD void squishr_bubble(squishr_t *q, syn_rng_t *rng, float start, float strength, float pitch, float life)
+{
+    squishr_bubble_t *b;
+    float seconds = (0.026f + q->viscosity * 0.065f + q->stretch * 0.13f) * life;
+    if (q->nev >= SQ_MAXE)
+        return;
+    b = &q->ev[q->nev++];
+    b->start = (uint32_t)fm_floorf(start * RATE + 0.5f);
+    b->len = (uint32_t)fm_floorf(seconds * RATE + 0.5f);
+    b->freq = q->base * pitch * (0.84f + syn_rnd(rng) * 0.32f);
+    b->strength = strength;
+    b->phase = syn_rnd(rng) * 0.2f;
+}
+
+static COLD uint32_t squishr_begin(void *st, const float *p)
+{
+    squishr_t *q = st;
+    syn_rng_t rng;
+    float bubble, onset = 0.008f, cutoff, d;
+    syn_rng_seed(&rng, syn_clamp(p[SQUISHR_seed], 0, 1));
+    q->texture = (uint32_t)fm_floorf(syn_clamp(p[SQUISHR_texture], 0, 5) + 0.5f);
+    q->viscosity = syn_clamp(p[SQUISHR_viscosity], 0, 1);
+    q->stretch = syn_clamp(p[SQUISHR_stretch], 0, 1);
+    q->pressure = syn_clamp(p[SQUISHR_pressure], 0, 1);
+    q->wetness = syn_clamp(p[SQUISHR_wetness], 0, 1);
+    bubble = syn_clamp(p[SQUISHR_bubbleSize], 0, 1);
+    q->duration = d = syn_clamp(p[SQUISHR_duration], 0.1f, 3.0f);
+    q->release = 0.06f + q->viscosity * 0.16f + q->stretch * 0.13f;
+    q->length = ceil_u((d + q->release) * RATE);
+    q->base = 1650.0f * fm_exp2f(-bubble * 3.8f);
+    q->amplitude = 0.45f + q->pressure * 0.7f;
+    q->nev = 0;
+    if (q->texture == 1) {
+        uint32_t count = (uint32_t)fm_maxf(1.0f, fm_floorf(d * (2.0f + q->pressure * 7.0f) + 0.5f));
+        for (uint32_t i = 0; i < count; i++) {
+            float st0 = onset + (float)i * d * 0.85f / (float)count, a = 0.7f + syn_rnd(&rng) * 0.3f;
+            squishr_bubble(q, &rng, st0, a, 0.8f + syn_rnd(&rng) * 0.4f, 1.1f);
+        }
+    } else if (q->texture == 2) {                /* suction builds slowly, then one rounded pop */
+        squishr_bubble(q, &rng, d * 0.76f, 1.2f, 0.75f, 1.5f);
+        squishr_bubble(q, &rng, d * 0.87f, 0.55f, 1.3f, 0.7f);
+    } else if (q->texture == 3) {
+        for (uint32_t i = 0; i < 7; i++) {
+            float st0 = onset + syn_rnd(&rng) * d * 0.34f, a = 0.4f + syn_rnd(&rng) * 0.45f, pt = 0.6f + syn_rnd(&rng) * 1.1f;
+            squishr_bubble(q, &rng, st0, a, pt, 0.6f + syn_rnd(&rng) * 0.6f);
+        }
+    } else if (q->texture == 4) {
+        uint32_t count = (uint32_t)fm_maxf(1.0f, fm_floorf(d * (3.0f + q->pressure * 3.0f) + 0.5f));
+        for (uint32_t i = 0; i < count; i++) {
+            float t = onset + (float)i * d * 0.82f / (float)count;
+            squishr_bubble(q, &rng, t, 1.0f, 0.62f, 1.4f);
+            squishr_bubble(q, &rng, t + 0.035f, 0.45f, 1.35f, 0.7f);
+        }
+    } else {
+        uint32_t count = (uint32_t)fm_maxf(2.0f, fm_floorf(d * (5.0f + q->pressure * 10.0f) + 0.5f));
+        for (uint32_t i = 0; i < count; i++) {
+            float st0 = onset + (float)i * d * 0.88f / (float)count, a = 0.3f + syn_rnd(&rng) * 0.5f, pt, lf;
+            pt = q->texture == 5 ? 0.7f : 0.5f + syn_rnd(&rng) * 0.8f;
+            lf = q->texture == 5 ? 2.0f : 0.65f + syn_rnd(&rng) * 0.65f;
+            squishr_bubble(q, &rng, st0, a, pt, lf);
+        }
+    }
+    q->rng = rng;
+    cutoff = 180.0f + (1.0f - q->viscosity) * 3800.0f + q->pressure * 500.0f;
+    q->filter = 1.0f - fm_expf(-TAU * cutoff / RATE);
+    q->low_noise = q->smooth_noise = q->previous = 0;
+    q->body_phase.hi = q->body_phase.lo = 0;
+    q->i = 0;
+    return q->length;
+}
+
+static void squishr_run(void *st, float *out, uint32_t n)
+{
+    squishr_t *q = st;
+    float noise_level = q->texture == 1 ? 0.015f : q->texture == 5 ? 0.14f : q->texture == 3 ? 1.1f : 0.7f;
+    float body_level = q->texture == 1 ? 0.03f : 1.0f, wet = 0.25f + q->wetness * 0.7f;
+    for (uint32_t k = 0; k < n; k++) {
+        uint32_t i = q->i + k;
+        float time = (float)i / RATE, progress = fm_minf(1.0f, time / q->duration), noise, env, attack, bf, body, rasp, ph;
+        float tail = time <= q->duration ? 1.0f : fm_expf(-(time - q->duration) / (q->release * 0.2f));
+        noise = syn_rnd(&q->rng) * 2.0f - 1.0f;
+        q->low_noise += (noise - q->low_noise) * q->filter;
+        q->smooth_noise += (q->low_noise - q->smooth_noise) * q->filter;
+        if (q->texture == 2) {
+            float x = fm_sinf(PI * fm_minf(1.0f, progress / 0.85f));
+            env = x * x;
+        } else if (q->texture == 3)
+            env = fm_expf(-progress * (5.0f - q->viscosity * 2.0f));
+        else if (q->texture == 4) {
+            float x = fm_sinf(progress * PI * (3.0f + q->pressure * 3.0f));
+            env = (0.4f + 0.6f * x * x) * (1.0f - progress * 0.6f);
+        } else
+            env = fm_powf(fm_sinf(PI * progress), 0.55f);
+        attack = fm_minf(1.0f, time / 0.009f);
+        bf = q->base * (q->texture == 5 ? 0.27f : 0.16f) * (1.0f + fm_sinf(time * (12.0f + q->pressure * 20.0f)) * q->stretch * 0.3f) *
+             (q->texture == 2 ? 1.6f - progress : 1.0f - progress * q->stretch * 0.45f);
+        ff_add(&q->body_phase, bf / RATE);
+        ph = ff_frac_mul(&q->body_phase, 1.0f);
+        body = fm_sin_turns(ph + ff_sin(&q->body_phase, 0.5f) * q->stretch * ITAU) * (q->texture == 5 ? 0.4f : 0.13f) *
+               (0.25f + q->viscosity * 0.75f);
+        rasp = q->smooth_noise * (0.6f + q->wetness * 0.45f) + (q->low_noise - q->previous) * (1.0f - q->viscosity) * 0.25f;
+        out[k] = (rasp * noise_level + body * body_level) * env * tail * q->amplitude * attack;
+        q->previous = q->low_noise;
+    }
+    for (uint32_t e = 0; e < q->nev; e++) {      /* the bubbles, in their order */
+        squishr_bubble_t *b = &q->ev[e];
+        uint32_t end = b->start + b->len, a = q->i > b->start ? q->i : b->start, z = q->i + n < end ? q->i + n : end;
+        if (z > q->length)
+            z = q->length;
+        for (uint32_t i = a; i < z; i++) {
+            uint32_t j = i - b->start;
+            float progress = (float)j / (float)b->len, glide, env, r;
+            if (q->texture == 2 || q->texture == 4)
+                glide = 1.65f - progress * (1.1f + q->stretch * 0.3f);
+            else if (q->texture == 5)
+                glide = 1.0f + fm_sinf(progress * PI * (3.0f + q->stretch * 5.0f)) * q->stretch * 0.6f;
+            else
+                glide = 0.65f + progress * (0.8f + q->pressure * 1.5f) + fm_sinf(progress * PI) * q->stretch * 0.5f;
+            b->phase += TAU * b->freq * glide / RATE;
+            if (b->phase >= TAU)
+                b->phase -= TAU;
+            env = fm_minf(1.0f, (float)j / (RATE * 0.0015f)) * fm_expf(-progress * (5.0f - q->viscosity * 2.0f)) *
+                  fm_minf(1.0f, (1.0f - progress) * 15.0f);
+            {
+                float rr = b->phase > PI ? b->phase - TAU : b->phase, s1 = fm_sin_pi(rr), c1, rc = rr + 0.5f * PI;
+                c1 = fm_sin_pi(rc >= PI ? rc - TAU : rc);
+                r = s1 + 2.0f * s1 * c1 * (1.0f - q->viscosity) * 0.13f;
+            }
+            out[i - q->i] += r * env * b->strength * q->amplitude * wet;
+        }
+    }
+    q->i += n;
+}
+
+/* ---- Clonkr: damped modes of an object's material, struck, scraped or rattled ---- */
+#define CL_MAXI 32
+typedef struct { syn_rng_t rng; uint32_t start, width, noise_len; float strength; } clonkr_hit_t;
+typedef struct {
+    syn_rng_t frng;                      /* the scrape's friction */
+    uint32_t i, length, action, onset, contact_end, nhits;
+    float hardness, friction, contact_span;
+    float mc[8], ms[8], re[8], im[8], w[8], scale;
+    clonkr_hit_t h[CL_MAXI];
+} clonkr_t;
+
+static COLD void clonkr_hit(clonkr_t *c, syn_rng_t *rng, float time, float strength)
+{
+    clonkr_hit_t *h;
+    uint32_t start = (uint32_t)fm_floorf(time * RATE + 0.5f), n;
+    if (start >= c->length || c->nhits >= CL_MAXI)
+        return;
+    h = &c->h[c->nhits++];
+    h->start = start;
+    h->width = (uint32_t)fm_maxf(1.0f, fm_floorf((1.0f - c->hardness) * 0.0025f * RATE + 0.5f));
+    h->noise_len = (uint32_t)fm_floorf((0.002f + (1.0f - c->hardness) * 0.009f) * RATE + 0.5f);
+    h->strength = strength;
+    h->rng = *rng;
+    n = h->noise_len < c->length - start ? h->noise_len : c->length - start;
+    rng_skip(rng, n);
+}
+
+static COLD uint32_t clonkr_begin(void *st, const float *p)
+{
+    static const struct { float pitch, ring, brightness, ratios[8]; } M[5] = {
+        {0.7f, 0.34f, 0.55f, {1, 2.17f, 3.04f, 4.61f, 5.43f, 6.8f, 8.7f, 10.3f}},
+        {1.55f, 1.25f, 0.95f, {1, 2.32f, 4.25f, 6.63f, 9.38f, 12.4f, 15.8f, 18.1f}},
+        {0.92f, 1.6f, 1, {1, 1.48f, 2.06f, 2.63f, 3.52f, 4.89f, 6.28f, 8.13f}},
+        {1.12f, 0.58f, 0.74f, {1, 1.87f, 3.22f, 4.74f, 6.18f, 7.91f, 10.2f, 12.6f}},
+        {0.42f, 0.16f, 0.2f, {1, 1.99f, 3.02f, 4.08f, 5.19f, 6.31f, 7.46f, 8.64f}}};
+    clonkr_t *c = st;
+    syn_rng_t rng;
+    uint32_t mat;
+    float size, hollow, damping, duration, decay, contact_end, base, sum = 0;
+    syn_rng_seed(&rng, syn_clamp(p[CLONKR_seed], 0, 1));
+    mat = (uint32_t)fm_floorf(syn_clamp(p[CLONKR_material], 0, 4) + 0.5f);
+    c->action = (uint32_t)fm_floorf(syn_clamp(p[CLONKR_action], 0, 2) + 0.5f);
+    size = syn_clamp(p[CLONKR_size], 0, 1);
+    hollow = syn_clamp(p[CLONKR_hollowness], 0, 1);
+    c->hardness = syn_clamp(p[CLONKR_hardness], 0, 1);
+    damping = syn_clamp(p[CLONKR_damping], 0, 1);
+    duration = syn_clamp(p[CLONKR_duration], 0.1f, 2.0f);
+    decay = 0.009f + (0.022f + duration * 0.44f * M[mat].ring) * (1.0f - 0.92f * damping);
+    contact_end = c->action == 0 ? 0.025f : duration;
+    c->length = ceil_u((contact_end + fm_minf(3.5f, decay * 7.0f)) * RATE);
+    c->onset = (uint32_t)fm_floorf(0.006f * RATE + 0.5f);
+    c->nhits = 0;
+    clonkr_hit(c, &rng, (float)c->onset / RATE, 1.0f);
+    c->contact_end = (uint32_t)fm_floorf(contact_end * RATE + 0.5f);
+    c->contact_span = fm_maxf(1.0f, contact_end * RATE - (float)c->onset);
+    c->friction = 0;
+    c->frng = rng;
+    if (c->action == 1) {                        /* the scrape's draws: a noise, a grain's chance, and the grain */
+        for (uint32_t i = c->onset; i < c->contact_end; i++) {
+            (void)syn_rnd(&rng);
+            if (syn_rnd(&rng) < 0.002f + c->hardness * 0.012f)
+                (void)syn_rnd(&rng);
+        }
+    } else if (c->action == 2) {
+        uint32_t count = (uint32_t)fm_floorf(4.0f + duration * 7.0f + c->hardness * 7.0f + 0.5f);
+        for (uint32_t hit = 1; hit < count; hit++) {
+            float progress = (float)hit / (float)count;
+            float time = 0.012f + (contact_end - 0.025f) * (progress + (syn_rnd(&rng) - 0.5f) * 0.5f / (float)count);
+            float strength = (0.35f + syn_rnd(&rng) * 0.65f) * (1.0f - progress * 0.6f);
+            clonkr_hit(c, &rng, time, strength);
+        }
+    }
+    base = 1400.0f * fm_exp2f(-size * 4.4f) * M[mat].pitch;
+    for (uint32_t m = 0; m < 8; m++) {           /* the modes */
+        float detune = 1.0f + (syn_rnd(&rng) - 0.5f) * 0.018f;
+        float f = fm_minf(RATE * 0.43f, base * M[mat].ratios[m] * detune), angle = TAU * f / RATE;
+        float tau = decay / (1.0f + (float)m * (0.08f + damping * 0.13f)), radius = fm_expf(-1.0f / (tau * RATE));
+        c->mc[m] = fm_cosf(angle) * radius;
+        c->ms[m] = fm_sinf(angle) * radius;
+        c->re[m] = c->im[m] = 0;
+        c->w[m] = fm_expf(-(float)m * (0.28f + (1.0f - c->hardness) * 0.62f + (1.0f - M[mat].brightness) * 0.4f)) *
+                  (m == 0 ? 1.0f + hollow * 1.2f : 1.0f - hollow * 0.35f);
+        sum += c->w[m];
+    }
+    c->scale = 1.4f / sum;
+    c->i = 0;
+    return c->length;
+}
+
+static void clonkr_run(void *st, float *out, uint32_t n)
+{
+    clonkr_t *c = st;
+    float exc[256];
+    for (uint32_t k = 0; k < n; k++)
+        out[k] = exc[k] = 0;
+    {                                            /* the first strike */
+        clonkr_hit_t *h = &c->h[0];
+        uint32_t a = c->i > h->start ? c->i : h->start;
+        for (uint32_t i = a; i < c->i + n && i < h->start + h->width && i < c->length; i++) {
+            uint32_t j = i - h->start;
+            exc[i - c->i] += (h->width == 1 ? 1.0f : fm_sinf(PI * ((float)j + 0.5f) / (float)h->width) * PI / (2.0f * (float)h->width)) *
+                             h->strength;
+        }
+        for (uint32_t i = a; i < c->i + n && i < h->start + h->noise_len && i < c->length; i++) {
+            uint32_t j = i - h->start;
+            out[i - c->i] += (syn_rnd(&h->rng) * 2.0f - 1.0f) * fm_expf(-(float)j / ((float)h->noise_len * 0.2f)) * h->strength *
+                             (0.07f + c->hardness * 0.2f);
+        }
+    }
+    if (c->action == 1) {                        /* the scrape */
+        uint32_t a = c->i > c->onset ? c->i : c->onset;
+        for (uint32_t i = a; i < c->i + n && i < c->contact_end; i++) {
+            float progress = (float)(i - c->onset) / c->contact_span, grain = 0, sp = fm_sinf(PI * progress);
+            c->friction += ((syn_rnd(&c->frng) * 2.0f - 1.0f) - c->friction) * (0.08f + 0.7f * c->hardness);
+            if (syn_rnd(&c->frng) < 0.002f + c->hardness * 0.012f)
+                grain = (syn_rnd(&c->frng) * 2.0f - 1.0f) * 0.2f;
+            exc[i - c->i] += (c->friction * 0.022f + grain) * fm_powf(sp, 0.4f);
+            out[i - c->i] += c->friction * (0.08f + 0.12f * c->hardness) * sp;
+        }
+    }
+    for (uint32_t hi = 1; hi < c->nhits; hi++) { /* the rattle's strikes, in their order */
+        clonkr_hit_t *h = &c->h[hi];
+        uint32_t a = c->i > h->start ? c->i : h->start;
+        for (uint32_t i = a; i < c->i + n && i < h->start + h->width && i < c->length; i++) {
+            uint32_t j = i - h->start;
+            exc[i - c->i] += (h->width == 1 ? 1.0f : fm_sinf(PI * ((float)j + 0.5f) / (float)h->width) * PI / (2.0f * (float)h->width)) *
+                             h->strength;
+        }
+        for (uint32_t i = a; i < c->i + n && i < h->start + h->noise_len && i < c->length; i++) {
+            uint32_t j = i - h->start;
+            out[i - c->i] += (syn_rnd(&h->rng) * 2.0f - 1.0f) * fm_expf(-(float)j / ((float)h->noise_len * 0.2f)) * h->strength *
+                             (0.07f + c->hardness * 0.2f);
+        }
+    }
+    for (uint32_t k = 0; k < n; k++) {           /* the modes ring from the strikes */
+        float sample = 0;
+        if (c->i + k < c->onset)
+            continue;
+        for (uint32_t m = 0; m < 8; m++) {
+            float re = c->re[m] * c->mc[m] - c->im[m] * c->ms[m] + exc[k];
+            c->im[m] = c->re[m] * c->ms[m] + c->im[m] * c->mc[m];
+            c->re[m] = re;
+            sample += re * c->w[m];
+        }
+        out[k] += sample * c->scale;
+    }
+    c->i += n;
+}
+
+/* a seed bfxr2 derives in double, seed * a + b (its own streams for a synth's parts): the rng's state worked out exactly,
+ * a and b each as two floats (FFC: the compiler folds the double constant away) */
+#define FFC(x) ((ff_t){(float)(x), (float)((x) - (double)(float)(x))})
+static COLD void syn_rng_seed_ab(syn_rng_t *r, float seed, ff_t a, ff_t b)
+{
+    ff_t x = ff_two_prod(seed, a.hi), y;
+    float s, v, e, hi, lo, fl;
+    x.lo += seed * a.lo;
+    s = x.hi + b.hi;                             /* x + b */
+    v = s - x.hi;
+    e = (x.hi - (s - v)) + (b.hi - v) + x.lo + b.lo;
+    y.hi = s + e;
+    y.lo = e - (y.hi - s);
+    /* floor(y * 4294967295) = floor(y.hi 2^32 - y.hi + y.lo 2^32 - y.lo): y.hi 2^32 is whole (y < 2) */
+    hi = y.hi * 4294967296.0f;
+    lo = y.lo * 4294967296.0f - y.hi - y.lo;     /* small beside hi */
+    fl = fm_floorf(lo);
+    if (!(y.hi > 0.0f)) { r->s = 0; return; }
+    r->s = (uint32_t)(hi >= 4294967296.0f ? 0xFFFFFFFFu : (uint32_t)hi) + (uint32_t)(int32_t)fl;
+}
+
+/* exp(-t / tau) from sample a on: stepped a sample at a time, exact at the block's first sample */
+typedef struct { float e, k; } dec_t;
+static inline void dec_at(dec_t *d, float tau, float t0) { d->e = fm_expf(-t0 / tau); d->k = fm_expf(-1.0f / (RATE * tau)); }
+static inline float dec_next(dec_t *d) { float v = d->e; d->e = fm_flush(d->e * d->k); return v; }
+
+/* ---- Boomr: pressure, turbulent gas, the ground's and a shell's transmission, diffuse reflections ---- */
+#define BO_MAXEV 6
+#define BO_MAXD 48
+#define BO_REV 12700                     /* the room's three paths, every third sample, 16 bits */
+typedef struct {
+    syn_rng_t rng;
+    uint32_t start;
+    float gain, low, mid, high, dc, drift, wind, gas_low, gas_dc;
+    ff_t shell;                          /* in turns */
+} boomr_event_t;
+typedef struct { syn_rng_t rng; uint32_t start, len; float life, gain, damping, dust_rate, body_rate, dust, body, env; } boomr_piece_t;
+typedef struct { syn_rng_t rng; uint32_t start, end; float life, strength, low, dc; } boomr_shock_t;
+typedef struct {
+    uint32_t i, frames, mech, nev, npieces, nshocks;
+    float duration, size, pressure, blast, debris, tail, space, gas, rubble;
+    float tfront, tgas, tbody, tdecay, tbright;
+    float pressure_decay, gas_decay, front_time, low_rate, mid_rate, dc_rate, motion_rate;
+    /* the jet */
+    syn_rng_t jrng;
+    float jet_delay, jet_life, gas_low_rate, gas_high_rate, jet_low, jet_high, jet_motion, first_time;
+    /* the room */
+    uint32_t rlen[3], roff[3], rd[3];
+    float rsm[3], racc[3], filtered, final_rate;
+    boomr_event_t ev[BO_MAXEV];
+    boomr_shock_t sh[6];
+    boomr_piece_t pc[BO_MAXD];
+    int16_t room[BO_REV];
+} boomr_t;
+
+static float coef(float hz) { return 1.0f - fm_expf(-TAU * hz / RATE); }
+
+static COLD uint32_t boomr_begin(void *st, const float *p)
+{
+    static const struct { float front, gas, body, decay, brightness; } T[8] = {
+        {1, 1, 1, 1, 1}, {0.55f, 1.3f, 0.8f, 1.75f, 0.65f}, {1.5f, 0.2f, 1.6f, 1.5f, 0.08f}, {1.1f, 0.65f, 1.8f, 1.45f, 0.4f},
+        {0.7f, 0.65f, 1.5f, 0.8f, 0.5f}, {0.6f, 0.5f, 0.22f, 0.2f, 1.5f}, {0.35f, 1.6f, 0.3f, 2, 2.5f}, {0.9f, 0.15f, 2.2f, 0.55f, 0.15f}};
+    boomr_t *b = st;
+    syn_rng_t rng, srng;
+    float seed = syn_clamp(p[BOOMR_seed], 0, 1), times[BO_MAXEV], gains[BO_MAXEV], spread, muffle, aftershock;
+    uint32_t mech;
+    b->duration = syn_clamp(p[BOOMR_duration], 0.12f, 5.0f);
+    b->frames = syn_len(b->duration);
+    b->size = syn_clamp(p[BOOMR_size], 0, 1);
+    b->pressure = syn_clamp(p[BOOMR_pressure], 0, 1);
+    b->blast = syn_clamp(p[BOOMR_blast], 0, 1);
+    b->debris = syn_clamp(p[BOOMR_debris], 0, 1);
+    spread = syn_clamp(p[BOOMR_spread], 0, 1);
+    b->tail = syn_clamp(p[BOOMR_tail], 0, 1);
+    muffle = syn_clamp(p[BOOMR_muffle], 0, 1);
+    b->mech = mech = (uint32_t)fm_floorf(syn_clamp(p[BOOMR_mechanism], 0, 7) + 0.5f);
+    b->space = syn_clamp(p[BOOMR_space], 0, 1);
+    b->gas = syn_clamp(p[BOOMR_gas], 0, 1);
+    aftershock = syn_clamp(p[BOOMR_aftershock], 0, 1);
+    b->rubble = syn_clamp(p[BOOMR_rubbleSize], 0, 1);
+    syn_rng_seed(&rng, seed);
+    b->tfront = T[mech].front;
+    b->tgas = T[mech].gas;
+    b->tbody = T[mech].body;
+    b->tdecay = T[mech].decay;
+    b->tbright = T[mech].brightness;
+    b->nev = 0;
+    times[b->nev] = mech == 7 ? 0.08f + b->size * 0.07f : 0.007f;
+    gains[b->nev++] = 1;
+    if (mech == 4)
+        for (uint32_t j = 0; j < 5; j++) {
+            times[b->nev] = b->duration * (0.12f + (float)j * 0.12f) * (0.8f + syn_rnd(&rng) * 0.3f);
+            gains[b->nev++] = 0.75f - (float)j * 0.09f;
+        }
+    if (mech == 2)
+        for (uint32_t j = 0; j < 3; j++) {
+            times[b->nev] = 0.06f + (0.1f + b->size * 0.18f) * fm_powf(1.42f, (float)j);
+            gains[b->nev++] = 0.44f * fm_powf(0.63f, (float)j);
+        }
+    b->first_time = times[0];
+    b->pressure_decay = (0.024f + b->size * 0.18f) * b->tdecay;
+    b->gas_decay = (0.022f + b->duration * (0.045f + b->tail * 0.28f)) * b->tdecay;
+    b->front_time = (0.0014f + b->size * 0.01f) * (mech == 2 ? 2.5f : mech == 5 ? 0.45f : 1.0f);
+    b->low_rate = coef(40.0f + 120.0f * (1.0f - b->size));
+    b->mid_rate = coef(200.0f + 650.0f * (1.0f - b->size));
+    b->dc_rate = coef(15.0f);
+    b->motion_rate = coef(4.0f + 10.0f * (1.0f - b->size));
+    for (uint32_t e = 0; e < b->nev; e++) {      /* each event runs to the end: two draws a sample */
+        boomr_event_t *v = &b->ev[e];
+        uint32_t start = (uint32_t)fm_floorf(times[e] * RATE + 0.5f);
+        v->start = start;
+        v->gain = gains[e];
+        v->low = v->mid = v->high = v->dc = v->drift = v->wind = v->gas_low = v->gas_dc = 0;
+        v->shell.hi = v->shell.lo = 0;
+        v->rng = rng;
+        rng_skip(&rng, start < b->frames ? 2u * (b->frames - start) : 0u);
+    }
+    /* the gas jet: its own stream */
+    syn_rng_seed_ab(&b->jrng, seed, FFC(0.71), FFC(0.193));
+    b->jet_delay = mech == 6 ? 0.015f : mech == 1 ? 0.045f : 0.07f + b->size * 0.045f;
+    b->jet_life = (0.1f + b->duration * (0.12f + b->tail * 0.3f)) *
+                  (mech == 6 ? 1.5f : mech == 2 ? 0.35f : mech == 5 ? 0.12f : 1.0f);
+    b->gas_low_rate = coef(50.0f + 80.0f * (1.0f - b->size));
+    b->gas_high_rate = coef(mech == 2 ? 170.0f : 700.0f + 4700.0f * fm_powf(1.0f - b->size, 0.65f));
+    b->jet_low = b->jet_high = b->jet_motion = 0;
+    /* the aftershocks: theirs */
+    syn_rng_seed_ab(&srng, seed, FFC(0.61), FFC(0.317));
+    b->nshocks = 0;
+    if (aftershock > 0) {
+        uint32_t count = 2u + (uint32_t)fm_floorf(aftershock * 4.0f + 0.5f);
+        for (uint32_t e = 0; e < count && e < 6u; e++) {
+            boomr_shock_t *h = &b->sh[b->nshocks++];
+            float arrival = 0.12f + b->duration * (0.04f + (float)e * 0.115f) * (0.8f + syn_rnd(&srng) * 0.4f);
+            uint32_t start = (uint32_t)fm_floorf(arrival * RATE + 0.5f), end;
+            h->life = (0.025f + b->size * 0.1f) * (0.7f + syn_rnd(&srng) * 0.6f);
+            h->strength = aftershock * fm_powf(0.7f, (float)e) * (0.75f + b->size * 0.8f) * (mech == 5 ? 0.06f : 1.0f);
+            end = start + ceil_u(h->life * 8.0f * RATE);
+            if (end > b->frames)
+                end = b->frames;
+            h->start = start;
+            h->end = end;
+            h->low = h->dc = 0;
+            h->rng = srng;
+            rng_skip(&srng, end > start ? end - start : 0u);
+        }
+    }
+    /* the debris: the main stream again, after the events */
+    b->npieces = (uint32_t)fm_floorf(b->debris * 48.0f + 0.5f);
+    for (uint32_t k = 0; k < b->npieces; k++) {
+        boomr_piece_t *c = &b->pc[k];
+        float chunk;
+        int32_t len;
+        c->start = (uint32_t)fm_floorf((0.018f + b->rubble * 0.055f + syn_rnd(&rng) * b->duration * (0.04f + spread * 0.8f)) * RATE);
+        chunk = syn_rnd(&rng);
+        c->life = (0.002f + chunk * 0.025f) * (0.25f + b->rubble * 2.5f);
+        c->gain = b->debris * (0.1f + syn_rnd(&rng) * 0.3f) * (0.7f + b->rubble);
+        len = (int32_t)b->frames - (int32_t)c->start;
+        if (len > (int32_t)ceil_u(c->life * RATE * 7.0f))
+            len = (int32_t)ceil_u(c->life * RATE * 7.0f);
+        c->len = len > 0 ? (uint32_t)len : 0u;
+        c->damping = fm_expf(-1.0f / (c->life * RATE));
+        {
+            float x = 1.0f - b->rubble * 0.94f, y = 1.0f - b->rubble * 0.85f;
+            c->dust_rate = coef((1200.0f + syn_rnd(&rng) * 8500.0f) * x * x);
+            c->body_rate = coef(45.0f + syn_rnd(&rng) * 600.0f * y * y);
+        }
+        c->dust = c->body = 0;
+        c->env = 1;
+        c->rng = rng;
+        rng_skip(&rng, c->len);
+    }
+    /* the room: three unequal, damped, recirculating paths */
+    {
+        static const float D[3] = {0.071f, 0.113f, 0.173f};
+        uint32_t off = 0;
+        for (uint32_t j = 0; j < 3; j++) {
+            uint32_t d = (uint32_t)fm_maxf(1.0f, fm_floorf(D[j] * (0.6f + b->space * 1.8f) * RATE + 0.5f));
+            b->rd[j] = d;
+            b->rlen[j] = d / 3u + 4u;
+            b->roff[j] = off;
+            off += b->rlen[j];
+            b->rsm[j] = b->racc[j] = 0;
+        }
+        for (uint32_t k = 0; k < off && k < BO_REV; k++)
+            b->room[k] = 0;
+    }
+    b->final_rate = coef(80.0f + 15000.0f * (1.0f - muffle) * (1.0f - muffle) * (1.0f - muffle));
+    b->filtered = 0;
+    b->i = 0;
+    return b->frames;
+}
+
+static float boomr_room_at(const boomr_t *b, uint32_t j, int32_t tau)   /* path j's input at sample tau */
+{
+    float pos, fr, a, c;
+    int32_t m;
+    const int16_t *r = b->room + b->roff[j];
+    if (tau < 0)
+        return 0;
+    pos = ((float)tau - 1.0f) / 3.0f;            /* slot m: the mean of samples 3m .. 3m + 2, at 3m + 1 */
+    m = (int32_t)fm_floorf(pos);
+    fr = pos - (float)m;
+    a = m < 0 ? 0.0f : (float)r[(uint32_t)m % b->rlen[j]];
+    c = (float)r[(uint32_t)(m + 1) % b->rlen[j]];
+    return (a + (c - a) * fr) * (16.0f / 32767.0f);
+}
+
+static void boomr_run(void *st, float *out, uint32_t n)
+{
+    boomr_t *b = st;
+    float hb = (650.0f + 8500.0f * (1.0f - b->size) * (1.0f - b->size)) * b->tbright;
+    float roll_tau = 0.05f + b->duration * (0.08f + b->tail * 0.25f);
+    for (uint32_t k = 0; k < n; k++)
+        out[k] = 0;
+    for (uint32_t e = 0; e < b->nev; e++) {      /* the events: pressure, gas, the rolling ground */
+        boomr_event_t *v = &b->ev[e];
+        uint32_t a = b->i > v->start ? b->i : v->start;
+        float t0;
+        dec_t cool, front, press, ga, plume, roll, r28, x1, x2;
+        if (a >= b->i + n || a >= b->frames)
+            continue;
+        t0 = (float)(a - v->start) / RATE;
+        dec_at(&cool, b->gas_decay * 0.65f, t0);
+        dec_at(&front, b->front_time, t0);
+        dec_at(&press, b->pressure_decay, t0);
+        dec_at(&ga, b->mech == 1 ? 0.026f + b->size * 0.08f : 0.002f, t0);
+        dec_at(&plume, b->gas_decay, t0);
+        dec_at(&roll, roll_tau, t0);
+        dec_at(&r28, 0.028f, t0);
+        dec_at(&x1, b->mech == 1 ? 0.04f : b->mech == 2 ? b->front_time * 2.0f : 0.08f + b->size * 0.2f, t0);
+        dec_at(&x2, b->mech == 1 ? 0.018f + b->size * 0.045f : 0.012f, t0);
+        for (uint32_t i = a; i < b->i + n && i < b->frames; i++) {
+            float t = (float)(i - v->start) / RATE, nn = syn_rnd(&v->rng) * 2.0f - 1.0f, n2 = syn_rnd(&v->rng) * 2.0f - 1.0f;
+            float cooling = dec_next(&cool), q = t / b->front_time, fr = (1.0f - q) * dec_next(&front);
+            float pb, gatk, billow, plm, rs, rl, tr = 0, e1 = dec_next(&x1), e2 = dec_next(&x2);
+            v->low += b->low_rate * (nn - v->low);
+            v->mid += b->mid_rate * (nn - v->mid);
+            v->dc += b->dc_rate * (v->low - v->dc);
+            v->drift += b->motion_rate * (n2 - v->drift);
+            v->gas_low += b->low_rate * (n2 - v->gas_low);
+            v->gas_dc += b->dc_rate * (v->gas_low - v->gas_dc);
+            v->high += coef(140.0f + hb * cooling) * (n2 - v->high);
+            v->wind += coef(85.0f + 260.0f * cooling) * (n2 - v->wind);
+            pb = (v->low - v->dc) * 5.5f * dec_next(&press);
+            gatk = 1.0f - dec_next(&ga);
+            billow = 0.8f + fm_fabsf(v->drift) * 6.0f;
+            plm = ((v->high - v->wind) * 0.65f + v->wind * 3.2f) * dec_next(&plume) * gatk * billow;
+            rs = b->mech == 1 ? v->gas_low - v->gas_dc : v->low - v->dc;
+            rl = rs * 4.2f * dec_next(&roll) * (1.0f - dec_next(&r28));
+            if (b->mech == 1) {                  /* a short hollow fuel container flexing as it opens */
+                ff_add(&v->shell, (95.0f + 170.0f * (1.0f - b->size)) * (1.0f - 0.14f * (1.0f - e1)) / RATE);
+                tr = (ff_sin(&v->shell, 1.0f) + 0.23f * ff_sin(&v->shell, 2.37f)) * e2 * 0.2f;
+            } else if (b->mech == 2)             /* cavitation's re-expansions */
+                tr = (1.0f - t / (b->front_time * 2.0f)) * e1 * 0.9f;
+            else if (b->mech == 3)
+                tr = (v->mid - v->low) * 5.5f * e1 * (1.0f - e2);
+            out[i - b->i] += v->gain * (b->pressure * (fr * b->tfront + pb * b->tbody + tr) + b->blast * b->tgas * plm +
+                                        b->tail * b->tbody * rl) * 0.8f;
+        }
+    }
+    {                                            /* the gas jet: an opening, uneven billows */
+        float c13 = coef(13.0f), sc = 11.0f + b->size * 9.0f, oc = 0.02f + b->size * 0.035f;
+        for (uint32_t k = 0; k < n; k++) {
+            uint32_t i = b->i + k;
+            float t = (float)i / RATE - b->jet_delay, nn = syn_rnd(&b->jrng) * 2.0f - 1.0f;
+            b->jet_low += b->gas_low_rate * (nn - b->jet_low);
+            b->jet_high += b->gas_high_rate * (nn - b->jet_high);
+            b->jet_motion += c13 * (syn_rnd(&b->jrng) * 2.0f - 1.0f - b->jet_motion);
+            if (t >= 0 && b->gas > 0) {
+                float opening = 1.0f - fm_expf(-t / oc), env = opening * fm_expf(-t / b->jet_life), sn = fm_sinf(t * sc);
+                float billow = 0.48f + fm_fabsf(b->jet_motion) * 9.0f + 0.25f * sn * sn;
+                out[k] += b->gas * (b->mech == 5 ? 0.2f : 1.0f) * env * billow *
+                          ((b->jet_high - b->jet_low) * 1.9f + b->jet_low * 2.2f);
+            }
+            if (b->mech == 7 && t + b->jet_delay < b->first_time) {
+                float u = (t + b->jet_delay) / b->first_time;
+                out[k] += (b->jet_high - b->jet_low) * b->blast * u * u * u * 0.65f;
+            }
+        }
+    }
+    for (uint32_t e = 0; e < b->nshocks; e++) {  /* fronts through heavy material */
+        boomr_shock_t *h = &b->sh[e];
+        float lp = coef(55.0f + 90.0f * (1.0f - b->size)), c12 = coef(12.0f), qd = 0.006f + b->size * 0.016f;
+        for (uint32_t i = b->i > h->start ? b->i : h->start; i < b->i + n && i < h->end; i++) {
+            float t = (float)(i - h->start) / RATE, q = t / qd;
+            h->low += lp * (syn_rnd(&h->rng) * 2.0f - 1.0f - h->low);
+            h->dc += c12 * (h->low - h->dc);
+            out[i - b->i] += h->strength * ((1.0f - q) * fm_expf(-q) * 0.8f +
+                                            (h->low - h->dc) * 7.0f * (1.0f - fm_expf(-t / 0.009f)) * fm_expf(-t / h->life));
+        }
+    }
+    for (uint32_t k = 0; k < b->npieces; k++) {  /* the debris */
+        boomr_piece_t *c = &b->pc[k];
+        uint32_t end = c->start + c->len, a = b->i > c->start ? b->i : c->start;
+        float qd = 0.0004f + b->rubble * 0.009f;
+        for (uint32_t i = a; i < b->i + n && i < end; i++) {
+            uint32_t j = i - c->start;
+            float nn = syn_rnd(&c->rng) * 2.0f - 1.0f, q = ((float)j / RATE) / qd;
+            c->dust += c->dust_rate * (nn - c->dust);
+            c->body += c->body_rate * (nn - c->body);
+            out[i - b->i] += (c->dust * (1.0f - b->rubble * 0.7f) + c->body * (0.5f + b->rubble * 5.0f) +
+                              (1.0f - q) * fm_expf(-q) * b->rubble) * c->env * c->gain;
+            c->env *= c->damping;
+        }
+    }
+    for (uint32_t k = 0; k < n; k++) {           /* the room, then the muffle */
+        uint32_t i = b->i + k;
+        float input = out[k];
+        if (b->space > 0) {
+            float echo = 0;
+            for (uint32_t j = 0; j < 3; j++) {
+                float sample = boomr_room_at(b, j, (int32_t)i - (int32_t)b->rd[j]), w;
+                b->rsm[j] += 0.08f * (sample - b->rsm[j]);
+                w = input * 0.36f + b->rsm[j] * (0.2f + b->space * 0.48f);
+                b->racc[j] += w;
+                if (i % 3u == 2u) {              /* a slot: the mean of three */
+                    b->room[b->roff[j] + (i / 3u) % b->rlen[j]] =
+                        (int16_t)(fm_clampf(b->racc[j] / 3.0f, -16.0f, 16.0f) * (32767.0f / 16.0f));
+                    b->racc[j] = 0;
+                }
+                echo += b->rsm[j];
+            }
+            input += echo * b->space * 0.7f;
+        }
+        b->filtered += b->final_rate * (input - b->filtered);
+        out[k] = b->filtered;
+    }
+    b->i += n;
+}
+
+/* ---- Fractr: a shower of brief fracture bursts, then rough shard contacts; Crystal and Pixel ring in tune ---- */
+#define FR_MAXS 96
+#define FR_MAXB 62
+typedef struct {
+    syn_rng_t rng;
+    uint32_t start, end, cs[5];
+    uint8_t ncont, next_contact, crack_left;
+    float strength_c[5], mc[3], ms[3], re[3], im[3];
+    float noise_env, noise_r, crack_env, crack_r, contact_strength, dust, body, dust_f, body_f, size;
+    uint32_t next_crack;
+} fractr_shard_t;
+typedef struct { syn_rng_t rng; uint32_t start, len; float release, weight, grit_low, mass_grit; } fractr_branch_t;
+typedef struct {
+    uint32_t i, length, mat, tuned, nshards, nbr, strain_a, strain_b;
+    float noise, grit, stress, mass, grit_rate, slow, fast;
+    syn_rng_t srng;                      /* the strain's */
+    fractr_shard_t sh[FR_MAXS];
+    fractr_branch_t br[FR_MAXB];
+} fractr_t;
+
+static const struct { float pitch, ring, noise, cutoff, grit, ratios[3]; } FR_MAT[8] = {
+    {1.65f, 0.22f, 1.7f, 11000, 0.28f, {1, 2.71f, 4.83f}}, {0.84f, 0.15f, 2.1f, 6500, 0.6f, {1, 1.91f, 3.77f}},
+    {1.05f, 1.75f, 0.025f, 10000, 0, {1, 1.505f, 2.014f}}, {0.17f, 0.08f, 3.8f, 1700, 1, {1, 1.63f, 2.42f}},
+    {1.0f, 0.6f, 0.015f, 10000, 0, {1, 2, 4}}, {0.65f, 0.26f, 1.8f, 7000, 0.42f, {1, 2.39f, 5.17f}},
+    {0.39f, 0.1f, 2.8f, 3800, 0.45f, {1, 1.82f, 3.03f}}, {0.55f, 0.015f, 2.8f, 5100, 0.65f, {1, 1.77f, 3.11f}}};
+
+/* a shard's contacts and cracks, as its render meets them: (the draws they take, to find the next shard's place) */
+static COLD uint32_t fractr_draws(const fractr_t *f, const fractr_shard_t *s0)
+{
+    fractr_shard_t s = *s0;
+    uint32_t i = s.start, cracks = 0;
+    if (s.start >= s.end)
+        return 0;
+    for (;;) {
+        uint32_t next = s.end;
+        if (s.next_contact < s.ncont && s.cs[s.next_contact] >= i && s.cs[s.next_contact] < next)
+            next = s.cs[s.next_contact];
+        if (s.crack_left > 0 && s.next_crack >= i && s.next_crack < next)
+            next = s.next_crack;
+        if (next >= s.end)
+            break;
+        i = next;
+        if (s.next_contact < s.ncont && i == s.cs[s.next_contact]) {
+            s.next_contact++;
+            s.crack_left = f->tuned ? 0 : (s.next_contact == 1 ? 3u + (uint32_t)fm_floorf(s.size * 4.0f + 0.5f) : 1u);
+            s.next_crack = i;
+        }
+        if (s.crack_left > 0 && i == s.next_crack) {
+            syn_rng_t r = s0->rng;
+            rng_skip(&r, (i - s.start) + 2u * cracks);
+            (void)syn_rnd(&r);
+            s.next_crack += 5u + (uint32_t)fm_floorf(syn_rnd(&r) * (25.0f + s.size * 100.0f) + 0.5f);
+            s.crack_left--;
+            cracks++;
+        }
+        i++;
+    }
+    return (s.end - s.start) + 2u * cracks;
+}
+
+static COLD uint32_t fractr_begin(void *st, const float *p)
+{
+    static const float WIDTH[8] = {0.00012f, 0.00065f, 0.0002f, 0.0022f, 0.00015f, 0.00023f, 0.0011f, 0.00022f};
+    static const float MASS[8] = {0.06f, 0.9f, 0.08f, 1, 0.02f, 0.35f, 1.3f, 0.15f};
+    fractr_t *f = st;
+    syn_rng_t rng, srng;
+    float seed = syn_clamp(p[FRACTR_seed], 0, 1), duration = syn_clamp(p[FRACTR_duration], 0.15f, 6.0f);
+    float size, spread, fracture, decay, gravity, bounce, cascade, gain, split_time, width, split_gain;
+    uint32_t fragments, bounces, branches, mat;
+    syn_rng_seed(&rng, seed);
+    f->length = syn_len(duration);
+    f->mat = mat = (uint32_t)fm_floorf(syn_clamp(p[FRACTR_material], 0, 7) + 0.5f);
+    f->tuned = mat == 2 || mat == 4;
+    fragments = (uint32_t)fm_floorf(syn_clamp(p[FRACTR_fragments], 3, 96) + 0.5f);
+    size = syn_clamp(p[FRACTR_fragmentSize], 0, 1);
+    spread = syn_clamp(p[FRACTR_spread], 0, 1);
+    f->stress = syn_clamp(p[FRACTR_stress], 0, 1);
+    fracture = syn_clamp(p[FRACTR_fracture], 0, 1);
+    decay = syn_clamp(p[FRACTR_decay], 0, 1);
+    gravity = syn_clamp(p[FRACTR_gravity], 0, 1);
+    bounce = syn_clamp(p[FRACTR_bounce], 0, 1);
+    cascade = duration * (0.012f + spread * 0.72f) * (1.0f - gravity * 0.6f);
+    gain = 1.45f * syn_clamp(p[FRACTR_shards], 0, 1) / fm_powf((float)fragments, 0.3f);
+    bounces = (uint32_t)fm_floorf(bounce * 4.0f + 0.5f);
+    f->noise = FR_MAT[mat].noise;
+    f->grit = FR_MAT[mat].grit;
+    f->nshards = fragments;
+    for (uint32_t k = 0; k < fragments; k++) {   /* each shard: its size, time, pitch, ring and contacts */
+        fractr_shard_t *s = &f->sh[k];
+        float ss = fm_maxf(0.0f, fm_minf(1.0f, size + (syn_rnd(&rng) - 0.5f) * 0.26f));
+        float progress = ((float)k + syn_rnd(&rng) * 0.65f) / (float)fragments;
+        float time = 0.006f + cascade * fm_powf(progress, 0.75f + 0.7f * gravity), freq, ring, contact, cutoff, strength;
+        float flight, nt, nf, ns;
+        uint32_t last;
+        if (mat == 4)
+            time = fm_floorf(time * 48.0f + 0.5f) / 48.0f + 0.006f;
+        s->start = (uint32_t)fm_floorf(time * RATE + 0.5f);
+        freq = 2700.0f * fm_exp2f(-ss * 4.5f) * FR_MAT[mat].pitch * (0.65f + 0.7f * syn_rnd(&rng));
+        if (mat == 4)                            /* Pixel: to the nearest semitone */
+            freq = 110.0f * fm_exp2f(fm_floorf(12.0f * fm_log2f(freq / 110.0f) + 0.5f) / 12.0f);
+        ring = (0.006f + decay * 0.23f) * FR_MAT[mat].ring * (0.8f + syn_rnd(&rng) * 0.4f);
+        contact = f->tuned ? 0.0025f : 0.0018f + (0.004f + decay * 0.025f) * (0.4f + ss) * (0.7f + FR_MAT[mat].grit);
+        s->noise_r = fm_expf(-1.0f / (RATE * contact));
+        s->crack_r = fm_expf(-1.0f / (RATE * (0.0003f + ss * 0.00065f)));
+        cutoff = FR_MAT[mat].cutoff * fm_exp2f(-ss * 1.6f);
+        s->dust_f = 1.0f - fm_expf(-TAU * cutoff / RATE);
+        s->body_f = 1.0f - fm_expf(-TAU * (130.0f + 1700.0f * (1.0f - ss) * FR_MAT[mat].pitch) / RATE);
+        strength = gain * (0.55f + syn_rnd(&rng) * 0.65f) * (1.0f - progress * 0.3f);
+        flight = (0.045f + 0.34f * (1.0f - gravity)) * (0.4f + 0.6f * ss);
+        s->cs[0] = s->start;
+        s->strength_c[0] = strength;
+        s->ncont = 1;
+        nt = time;
+        nf = flight;
+        ns = strength;
+        for (uint32_t j = 0; j < bounces; j++) {
+            nt += nf;
+            nf *= 0.43f + bounce * 0.24f;
+            ns *= 0.27f + bounce * 0.42f;
+            s->cs[s->ncont] = (uint32_t)fm_floorf(nt * RATE + 0.5f);
+            s->strength_c[s->ncont++] = ns;
+        }
+        last = s->cs[s->ncont - 1u] + (uint32_t)fm_floorf(fm_maxf(ring, contact) * 7.0f * RATE + 0.5f);
+        s->end = last < f->length ? last : f->length;
+        for (uint32_t m = 0; m < 3; m++) {
+            float angle = TAU * fm_minf(11000.0f, freq * FR_MAT[mat].ratios[m]) / RATE;
+            float radius = fm_expf(-(1.0f + (float)m * 0.55f) / (ring * RATE));
+            s->mc[m] = fm_cosf(angle) * radius;
+            s->ms[m] = fm_sinf(angle) * radius;
+            s->re[m] = s->im[m] = 0;
+        }
+        s->noise_env = s->crack_env = s->contact_strength = s->dust = s->body = 0;
+        s->next_contact = s->crack_left = 0;
+        s->next_crack = 0;
+        s->size = ss;
+        s->rng = rng;
+        rng_skip(&rng, fractr_draws(f, s));
+    }
+    /* the parent object's failure: its own stream; snaps branching in time over a slower mass response */
+    syn_rng_seed_ab(&srng, seed, FFC(0.79), FFC(0.137));
+    split_time = 0.011f + f->stress * 0.029f;
+    f->mass = MASS[mat];
+    width = WIDTH[mat] * (0.7f + size * 0.8f);
+    split_gain = fracture * (f->tuned ? 0.25f : mat == 7 ? 2.2f : 3.4f);
+    branches = mat == 7 ? 34u + (uint32_t)fm_floorf(size * 28.0f + 0.5f) : mat == 6 ? 5u : 7u + (uint32_t)fm_floorf(size * 9.0f + 0.5f);
+    f->nbr = branches < FR_MAXB ? branches : FR_MAXB;
+    f->grit_rate = 1.0f - fm_expf(-TAU * FR_MAT[mat].cutoff * 0.55f / RATE);
+    for (uint32_t k = 0; k < f->nbr; k++) {
+        fractr_branch_t *b = &f->br[k];
+        float u = (float)k / (float)branches, span, delay;
+        int32_t len;
+        uint32_t start;
+        span = mat == 7 ? 0.065f + f->stress * 0.07f : mat == 6 ? 0.017f : mat == 1 ? 0.045f + f->stress * 0.025f :
+               0.022f + f->stress * 0.035f;
+        delay = k == 0 ? 0.0f : 0.001f + fm_powf(u, 1.6f) * span * (0.75f + syn_rnd(&srng) * 0.5f);
+        start = (uint32_t)fm_floorf((split_time + delay) * RATE + 0.5f);
+        b->release = width * (0.7f + syn_rnd(&srng) * 0.9f);
+        b->weight = split_gain * (k == 0 ? 1.0f : 0.25f + 0.4f * (1.0f - u)) * (0.75f + syn_rnd(&srng) * 0.5f);
+        len = (int32_t)f->length - (int32_t)start;
+        {
+            int32_t l2 = (int32_t)fm_floorf((b->release * 9.0f + 0.009f * f->mass) * RATE + 0.5f);
+            if (l2 < len)
+                len = l2;
+        }
+        b->start = start;
+        b->len = len > 0 ? (uint32_t)len : 0u;
+        b->grit_low = b->mass_grit = 0;
+        b->rng = srng;
+        rng_skip(&srng, 2u * b->len);
+    }
+    f->srng = srng;                              /* the strain before the failure */
+    f->strain_a = (uint32_t)fm_floorf(0.005f * RATE + 0.5f);
+    {
+        uint32_t e = (uint32_t)fm_floorf(split_time * RATE + 0.5f);
+        f->strain_b = e < f->length ? e : f->length;
+    }
+    f->slow = f->fast = 0;
+    f->i = 0;
+    return f->length;
+}
+
+static void fractr_run(void *st, float *out, uint32_t n)
+{
+    fractr_t *f = st;
+    float mode_gain = f->tuned ? 1.0f : 0.12f, noise_k = f->noise * (f->tuned ? 1.0f : 0.58f);
+    for (uint32_t k = 0; k < n; k++)
+        out[k] = 0;
+    for (uint32_t si = 0; si < f->nshards; si++) {   /* the shards, in their order */
+        fractr_shard_t *s = &f->sh[si];
+        uint32_t a = f->i > s->start ? f->i : s->start;
+        for (uint32_t i = a; i < f->i + n && i < s->end; i++) {
+            float an, bn, cn, nn, rough;
+            if (s->next_contact < s->ncont && i == s->cs[s->next_contact]) {
+                float hit = s->strength_c[s->next_contact++];
+                s->re[0] += hit * mode_gain;
+                s->re[1] += hit * mode_gain * 0.44f;
+                s->re[2] += hit * mode_gain * 0.24f;
+                s->noise_env += hit * noise_k;
+                s->contact_strength = hit;       /* the first split: several tiny failures; later ones scrape once */
+                s->crack_left = f->tuned ? 0 : (s->next_contact == 1 ? (uint8_t)(3u + (uint32_t)fm_floorf(s->size * 4.0f + 0.5f)) : 1u);
+                s->next_crack = i;
+            }
+            if (s->crack_left > 0 && i == s->next_crack) {
+                s->crack_env += s->contact_strength * (0.5f + syn_rnd(&s->rng) * 0.9f);
+                s->next_crack += 5u + (uint32_t)fm_floorf(syn_rnd(&s->rng) * (25.0f + s->size * 100.0f) + 0.5f);
+                s->crack_left--;
+            }
+            an = s->re[0] * s->mc[0] - s->im[0] * s->ms[0];
+            s->im[0] = s->re[0] * s->ms[0] + s->im[0] * s->mc[0];
+            s->re[0] = an;
+            bn = s->re[1] * s->mc[1] - s->im[1] * s->ms[1];
+            s->im[1] = s->re[1] * s->ms[1] + s->im[1] * s->mc[1];
+            s->re[1] = bn;
+            cn = s->re[2] * s->mc[2] - s->im[2] * s->ms[2];
+            s->im[2] = s->re[2] * s->ms[2] + s->im[2] * s->mc[2];
+            s->re[2] = cn;
+            nn = syn_rnd(&s->rng) * 2.0f - 1.0f;
+            s->dust += (nn - s->dust) * s->dust_f;
+            s->body += (nn - s->body) * s->body_f;
+            rough = s->dust + s->body * f->grit;
+            out[i - f->i] += (an + bn + cn) * 0.52f + rough * s->noise_env + (s->dust - s->body * 0.5f) * s->crack_env;
+            s->noise_env = fm_flush(s->noise_env * s->noise_r);
+            s->crack_env = fm_flush(s->crack_env * s->crack_r);
+        }
+    }
+    for (uint32_t bi = 0; bi < f->nbr; bi++) {   /* the structural snaps */
+        fractr_branch_t *b = &f->br[bi];
+        uint32_t a = f->i > b->start ? f->i : b->start;
+        float bq_d = 0.002f + f->mass * 0.004f, mg = f->mat == 3 || f->mat == 6 ? 6.0f : 1.2f;
+        for (uint32_t i = a; i < f->i + n && i < b->start + b->len; i++) {
+            float t = (float)(i - b->start) / RATE, q = t / b->release, tensile, tearing, bq, body;
+            b->grit_low += f->grit_rate * (syn_rnd(&b->rng) * 2.0f - 1.0f - b->grit_low);
+            tensile = (1.0f - q) * fm_expf(-q);
+            tearing = b->grit_low * fm_expf(-t / (b->release * 3.0f)) * 0.55f;
+            bq = t / bq_d;
+            b->mass_grit += 0.12f * (syn_rnd(&b->rng) * 2.0f - 1.0f - b->mass_grit);
+            body = ((1.0f - bq) + b->mass_grit * mg) * fm_expf(-bq) * f->mass * 0.95f;
+            out[i - f->i] += b->weight * (tensile + tearing + body);
+        }
+    }
+    if (!f->tuned && f->stress > 0) {            /* strain before the failure: intermittent, no ringing */
+        for (uint32_t i = f->i > f->strain_a ? f->i : f->strain_a; i < f->i + n && i < f->strain_b; i++) {
+            float u = (float)i / (float)f->strain_b, nn = syn_rnd(&f->srng) * 2.0f - 1.0f, x, x2;
+            f->slow += 0.006f * (nn - f->slow);
+            f->fast += 0.055f * (nn - f->fast);
+            x = 0.5f + 0.5f * fm_sinf(u * (36.0f + (float)f->mat * 9.0f));
+            x2 = x * x;
+            out[i - f->i] += (f->fast - f->slow) * x2 * x2 * x * f->stress * u * 2.5f;
+        }
+    }
+    f->i += n;
+}
+
 const syn_engine_t SYN_ENGINES[] = {
     {whooshr_begin, whooshr_run},
     {choirr_begin, choirr_run},
@@ -1939,6 +2857,10 @@ const syn_engine_t SYN_ENGINES[] = {
     {signlr_begin, signlr_run},
     {pluckr_begin, pluckr_run},
     {rustlr_begin, rustlr_run},
+    {squishr_begin, squishr_run},
+    {clonkr_begin, clonkr_run},
+    {boomr_begin, boomr_run},
+    {fractr_begin, fractr_run},
 };
 _Static_assert(sizeof(SYN_ENGINES) / sizeof(SYN_ENGINES[0]) == SYN_NPRESET, "an engine for every synth");
 _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_STATE_BYTES &&
@@ -1946,4 +2868,6 @@ _Static_assert(sizeof(whooshr_t) <= SYN_STATE_BYTES && sizeof(choirr_t) <= SYN_S
                sizeof(bouncr_t) <= SYN_STATE_BYTES && sizeof(swarmr_t) <= SYN_STATE_BYTES &&
                sizeof(machinr_t) <= SYN_STATE_BYTES && sizeof(crittr_t) <= SYN_STATE_BYTES &&
                sizeof(zappr_t) <= SYN_STATE_BYTES && sizeof(signlr_t) <= SYN_STATE_BYTES &&
-               sizeof(pluckr_t) <= SYN_STATE_BYTES && sizeof(rustlr_t) <= SYN_STATE_BYTES, "synth state");
+               sizeof(pluckr_t) <= SYN_STATE_BYTES && sizeof(rustlr_t) <= SYN_STATE_BYTES &&
+               sizeof(squishr_t) <= SYN_STATE_BYTES && sizeof(clonkr_t) <= SYN_STATE_BYTES &&
+               sizeof(boomr_t) <= SYN_STATE_BYTES && sizeof(fractr_t) <= SYN_STATE_BYTES, "synth state");

@@ -715,7 +715,7 @@ static void value_text(uint32_t k, char *t)
         const syn_param_t *d = &cur_syn()->p[k];
         float v = cur_p()[k];
         t[0] = 0;
-        if (d->choices && syn_choices(d, (uint32_t)(int32_t)(v - d->min + 0.5f), t, 16))
+        if (d->choices && syn_choices(d, v, t, 24))
             return;
         if (d->round || d->choices || d->max - d->min > 20.0f)
             int_text((int32_t)fm_floorf(v + 0.5f), t);
@@ -738,7 +738,7 @@ static void value_text(uint32_t k, char *t)
 
 static void say_param(uint32_t k)
 {
-    char t[16];
+    char t[24];
     value_text(k, t);
     app_say(set.synth ? cur_syn()->p[k].label : BFXR_PARAMS[k].label, t);
 }
@@ -794,7 +794,7 @@ static void edit_param(uint32_t k, int32_t e)
             return;
         q = &sy->p[k];
         if (q->choices)
-            syn_set(sy, p, k, p[k] + (e > 0 ? 1.0f : -1.0f));
+            syn_set(sy, p, k, syn_choice_step(q, p[k], e));
         else if (q->round)
             syn_set(sy, p, k, p[k] + (float)e);
         else
