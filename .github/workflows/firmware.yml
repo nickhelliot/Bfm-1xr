@@ -28,6 +28,7 @@ jobs:
         set -euo pipefail
         ./build.sh --host
         app/build/host/bfmxr_host app/tests/basic.txt app/build/host
+        app/build/host/bfmxr_host app/tests/seq.txt app/build/host
         git clone -q https://github.com/increpare/bfxr2 "$RUNNER_TEMP/bfxr2"
         git -C "$RUNNER_TEMP/bfxr2" checkout -q 43c6c3b15e76407e9863b999741340999225e21f   # (the version ported)
         node tools/gen_ref.js "$RUNNER_TEMP/bfxr2" "$RUNNER_TEMP/ref"

@@ -1,0 +1,122 @@
+# BFMXR in the host simulator: the sequencer (SEQ)
+wait 2500
+expect splash 0
+# two sounds in slots: Bfxr in 1, Whooshr in 2
+press SAVE
+key 0 down
+wait 30
+key 0 up
+wait 30
+release SAVE
+wait 50
+tap ENV
+turn SELECT 1
+tap SEL
+wait 2500
+expect synth 1
+expect ready 1
+press SAVE
+key 2 down
+wait 30
+key 2 up
+wait 30
+release SAVE
+wait 50
+expect slots 3
+# a Mixr sound (two sounds mixed, here a long one) in slot 3
+tap ENV
+turn SELECT 21
+tap SEL
+wait 30
+expect synth 22
+turn PRESET 1
+wait 4000
+expect ready 1
+press SAVE
+key 4 down
+wait 30
+key 4 up
+wait 30
+release SAVE
+wait 50
+expect slots 7
+# the sequencer
+tap SEQ
+wait 1500
+expect seq 1
+expect seqtracks 1
+expect seqslot 1
+expect seqready 1
+# steps: SEL toggles, a key enters its note and moves on
+tap SEL
+wait 30
+expect seqnote 0
+turn SELECT 4
+expect seqstep 4
+key 9 down
+wait 30
+key 9 up
+wait 30
+expect seqstep 5
+turn K2 3
+wait 30
+expect seqnote 4
+# a second track with the Whooshr
+tap EDIT
+wait 30
+expect seqtracks 2
+expect seqtrack 1
+turn K1 1
+wait 3000
+expect seqslot 2
+expect seqready 3
+tap SEL
+turn SELECT 8
+tap SEL
+wait 30
+turn K3 20
+expect bpm 140
+# a third track: the Mixr sound, cut to fit the track
+tap EDIT
+turn K1 1
+wait 5000
+expect seqtracks 3
+expect seqslot 3
+expect seqready 7
+turn SELECT 2
+tap SEL
+wait 30
+shot seq.png
+tap PLAY
+wait 50
+expect seqrun 1
+wav seq.wav
+wait 1800
+wavstop
+expect peak_db_min -30
+shot seq_play.png
+tap PLAY
+wait 30
+expect seqrun 0
+# kept across a power cycle
+tap SAVE
+wait 50
+tap HOME
+wait 2500
+expect seq 0
+expect ready 1
+reboot
+wait 4000
+tap SEQ
+wait 3000
+expect seqtracks 3
+expect seqready 7
+expect bpm 140
+press SAVE
+tap FX
+release SAVE
+wait 50
+expect seqtracks 2
+tap SEQ
+wait 2500
+expect seq 0

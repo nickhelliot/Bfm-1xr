@@ -15,6 +15,7 @@
  *   SEL + a white key    recall the slot's sound and play it
  *   GLO             the settings: play on change, voices, fast knobs, start-up, MIDI in channel, palette
  *   ENV             the synths: the classic Bfxr, then bfxr2's others (Whooshr ...), each its own screen and sound
+ *   SEQ             the sequencer: up to 4 tracks, a saved sound each, 16 steps ("the sequencer" below)
  * On another synth's screen PRESET steps through its recipes (then RANDOMIZE), EDIT makes the recipe again, FX
  * mutates, ALGO is VARIATION; the sound renders into a buffer (synths.c, "the preset synths' sound" below).
  * The slots go to and from a computer over USB SysEx (the site's Library page): see "the slots over USB" below. */
@@ -87,7 +88,22 @@ typedef struct {
     uint8_t srec[SYN_SLOTS];             /* the recipe last made (its nr: RANDOMIZE; SREC_NONE: none yet, the defaults) */
     uint8_t ssel[SYN_SLOTS];             /* the first of the four rows K1 .. K4 change */
     float sp[SYN_SLOTS][SYN_MAXP];
+    /* the sequencer's pattern (0.17; a record from before it: one empty track) */
+    struct {
+        uint8_t n, bpm, rsv[2];          /* tracks in use (1 .. SQ_TRACKS), the tempo (16 steps: a bar of 4 beats) */
+        struct {
+            uint8_t slot;                /* its sound: slot 1 .. 16 (0: none) */
+            uint8_t level;               /* 0 .. 100 % */
+            uint8_t mute, rsv;
+            int8_t note[16];             /* a step: SQ_OFF, else the semitones from the sound as made */
+        } t[4];
+    } seq;
 } settings_t;
+#define SQ_TRACKS 4u
+#define SQ_STEPS 16u
+#define SQ_OFF (-128)
+#define SQ_NOTE_MAX 36
+#define SET_16_SIZE ((uint32_t)__builtin_offsetof(settings_t, seq))               /* 0.13 .. 0.16: before the sequencer */
 #define SET_OLD_SIZE ((uint32_t)__builtin_offsetof(settings_t, play_on_change))   /* the record before the menu's settings */
 #define SET_07_SIZE ((uint32_t)__builtin_offsetof(settings_t, srec))             /* the record before the synths */
 #define SREC_NONE 0xFFu
@@ -153,6 +169,21 @@ static volatile float sb_vol;
 typedef struct { uint8_t active; uint32_t i; float frac, step; } sb_voice_t;
 static sb_voice_t sb_voice[NVOICES];
 
+/* The sequencer (SEQ): up to SQ_TRACKS tracks, each a saved sound (a slot) and 16 steps with a pitch each. While it
+ * is open the buffer is the tracks': a quarter each (SQ_REGION bytes: 1.25 s as bytes, or to 0.62 s as 16 bits), the
+ * slot's sound rendered into it by the same render (rd, a track at a time; the classic Bfxr's sounds too, so every
+ * track plays from the buffer), a longer sound cut there with a fade. The audio interrupt counts the steps and
+ * starts each track's one voice; the keys and PLAY's notes play the track on screen. */
+#define SQ_REGION (SB_LEN / 4u)
+typedef struct { volatile uint8_t ready; uint8_t wide; uint32_t len; float vol; } sq_sound_t;
+static sq_sound_t sq_sound[SQ_TRACKS];           /* a track's sound in its region */
+static sb_voice_t sq_voice[SQ_TRACKS];
+static volatile uint8_t sq_on, sq_run;           /* the sequencer is open; the pattern runs */
+static volatile uint8_t sq_sel;                  /* the track on screen (the keys play it) */
+static volatile uint8_t sq_now;                  /* the step last started */
+static uint32_t sq_step, sq_left;                /* audio interrupt: the next step, the samples until it */
+static uint8_t sq_need;                          /* tracks whose sound is to be rendered, a bit each */
+
 enum { RD_IDLE, RD_MEAN, RD_OUT, RD_FINISH, RD_REVERSE, RD_ECHO, RD_SUM, RD_PEAK, RD_MIX };
 /* A synth that works on its whole sound (syn_whole_t) is kept raw in the buffer while it is made (16 bits, or for a
  * long one µ-law bytes of a range of -8 .. 8), then reversed or echoed there, then its mean taken, then finished. */
@@ -171,6 +202,9 @@ static struct {
     const syn_engine_t *eng;             /* the sound being made, and its parameters (rd.p, or a Mixr sound's) */
     const float *cp;
     uint32_t base;                       /* where a sound kept as bytes starts in the buffer (Mixr's second: the end) */
+    uint32_t r0, rn, cap;                /* the part of the buffer rendered into: its start, bytes and longest sound
+                                            (the whole buffer; a sequencer track's region) */
+    int8_t track;                        /* the sequencer's track being rendered (-1: the sound on screen) */
     /* Mixr: its two sounds (parameters to the classic Bfxr's 32), the one made first (the other is mixed into it),
      * the mix's length, the first's format (16 bits) and level as it is mixed, the second's length */
     uint8_t mix, phase, first, akeep;
@@ -233,6 +267,17 @@ static void voice_start(float pitch, int mono)   /* audio interrupt */
     uint32_t i, pick = 0, k;
     bfxr_sound_t s;
     uint32_t nv = set.voices >= 1u && set.voices <= NVOICES ? set.voices : NVOICES;
+    (void)mono;
+    if (sq_on) {                                 /* the sequencer: the track on screen */
+        sb_voice_t *b = &sq_voice[sq_sel % SQ_TRACKS];
+        if (sq_sound[sq_sel % SQ_TRACKS].ready) {
+            b->i = 0;
+            b->frac = 0;
+            b->step = pitch;
+            b->active = 1;
+        }
+        return;
+    }
     if (set.synth) {                             /* a preset synth: the buffer */
         if (!sb_ready)
             return;
@@ -281,6 +326,33 @@ static void voice_start(float pitch, int mono)   /* audio interrupt */
     bx_age[pick] = ++bx_clock;
 }
 
+/* audio interrupt: a voice's n samples of a sound in the buffer (16 bits or µ-law bytes), transposed, added to out */
+static void sb_mix(sb_voice_t *b, const uint8_t *mem, uint32_t len, int wide, float vol, float *out, uint32_t n)
+{
+    uint32_t i;
+    for (i = 0; i < n; i++) {
+        float a, c;
+        uint32_t w;
+        if (b->i + 1u >= len) {
+            b->active = 0;
+            break;
+        }
+        if (wide) {
+            const int16_t *w16 = (const int16_t *)(const void *)mem;
+            a = (float)w16[b->i] * (1.0f / 32767.0f);
+            c = (float)w16[b->i + 1u] * (1.0f / 32767.0f);
+        } else {
+            a = sb_dec[mem[b->i]];
+            c = sb_dec[mem[b->i + 1u]];
+        }
+        out[i] += (a + (c - a) * b->frac) * vol;
+        b->frac += b->step;
+        w = (uint32_t)b->frac;
+        b->i += w;
+        b->frac -= (float)w;
+    }
+}
+
 static void midi_in(void)                /* audio interrupt: notes from USB / TRS play the sound, a chord too */
 {
     uint32_t pkt;
@@ -323,36 +395,53 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     }
     for (v = 0; v < NVOICES; v++) {              /* a preset synth's sound, from the buffer */
         sb_voice_t *b = &sb_voice[v];
-        uint32_t len = sb_len;
-        float vol = sb_vol;
         if (!b->active)
             continue;
-        if (!sb_ready) {
+        if (!sb_ready || sq_on) {
             b->active = 0;
             continue;
         }
-        for (i = 0; i < n; i++) {
-            float a, c;
-            uint32_t w;
-            if (b->i + 1u >= len) {
-                b->active = 0;
-                break;
-            }
-            if (sb_wide) {
-                const int16_t *w16 = (const int16_t *)(const void *)sb_mem;
-                a = (float)w16[b->i] * (1.0f / 32767.0f);
-                c = (float)w16[b->i + 1u] * (1.0f / 32767.0f);
-            } else {
-                a = sb_dec[sb_mem[b->i]];
-                c = sb_dec[sb_mem[b->i + 1u]];
-            }
-            bx_buf[i] += (a + (c - a) * b->frac) * vol;
-            b->frac += b->step;
-            w = (uint32_t)b->frac;
-            b->i += w;
-            b->frac -= (float)w;
-        }
+        sb_mix(b, sb_mem, sb_len, sb_wide, sb_vol, bx_buf, n);
         playing += b->active;
+    }
+    if (sq_on) {                                 /* the sequencer: its steps, sample for sample */
+        uint32_t at = 0;
+        while (at < n) {
+            uint32_t m = n - at, t;
+            if (sq_run && sq_left == 0) {
+                uint32_t bpm = set.seq.bpm < 40u ? 40u : set.seq.bpm;
+                for (t = 0; t < SQ_TRACKS && t < set.seq.n; t++) {
+                    int32_t nt = set.seq.t[t].note[sq_step & 15u];
+                    if (nt == SQ_OFF || set.seq.t[t].mute || !sq_sound[t].ready)
+                        continue;
+                    sq_voice[t].i = 0;
+                    sq_voice[t].frac = 0;
+                    sq_voice[t].step = fm_exp2f((float)nt / 12.0f);
+                    sq_voice[t].active = 1;
+                }
+                sq_now = (uint8_t)(sq_step & 15u);
+                sq_step = (sq_step + 1u) & 15u;
+                sq_left = 661500u / bpm;         /* a 16th: 44100 * 60 / (bpm * 4) samples */
+            }
+            if (sq_run && sq_left < m)
+                m = sq_left;
+            for (t = 0; t < SQ_TRACKS; t++) {
+                sb_voice_t *b = &sq_voice[t];
+                if (!b->active)
+                    continue;
+                if (!sq_sound[t].ready) {
+                    b->active = 0;
+                    continue;
+                }
+                sb_mix(b, sb_mem + t * SQ_REGION, sq_sound[t].len, sq_sound[t].wide,
+                       sq_sound[t].vol * (float)set.seq.t[t].level * 0.01f, bx_buf + at, m);
+            }
+            if (sq_run)
+                sq_left -= m;
+            at += m;
+        }
+        for (v = 0; v < SQ_TRACKS; v++)
+            playing += sq_voice[v].active;
     }
     if (sp_snd < SPLASH_SND_N) {                 /* the start-up sound, under the sounds */
         uint32_t p = sp_snd;
@@ -397,6 +486,8 @@ void app_panic(void)
         bx_voice[v].active = 0;
         sb_voice[v].active = 0;
     }
+    for (v = 0; v < SQ_TRACKS; v++)
+        sq_voice[v].active = 0;
     bx_tail = bx_head;
 }
 
@@ -437,6 +528,21 @@ static void clamp_syn_sound(uint32_t synth, float *p)   /* a stored or received 
         p[k] = 0;
 }
 
+static void seq_fresh(void)                      /* the sequencer: one track, no steps yet */
+{
+    uint32_t t, k;
+    set.seq.n = 1;
+    set.seq.bpm = 120;
+    set.seq.rsv[0] = set.seq.rsv[1] = 0;
+    for (t = 0; t < SQ_TRACKS; t++) {
+        set.seq.t[t].slot = 0;
+        set.seq.t[t].level = 100;
+        set.seq.t[t].mute = set.seq.t[t].rsv = 0;
+        for (k = 0; k < SQ_STEPS; k++)
+            set.seq.t[t].note[k] = SQ_OFF;
+    }
+}
+
 static void settings_fresh(void)
 {
     bfxr_sound_t s;
@@ -450,6 +556,7 @@ static void settings_fresh(void)
     set.synth = 0;
     set.cfg_rsv = 0;
     synths_fresh();
+    seq_fresh();
     bfxr_generate(&s, GEN_PICKUP);
     for (k = 0; k < BP_COUNT; k++)
         set.p[k] = s.p[k];
@@ -473,8 +580,8 @@ void app_init(void)
 }
 static void app_init_settings(void)
 {
-    uint32_t k;
-    int gb, got;
+    uint32_t k, t;
+    int gb, got, seq_ok;
     app_panic();                                 /* (silence: a restart in the simulator keeps the old RAM) */
     sb_init();
     rd.want = 1;                                 /* (a preset synth's sound: rendered once the animation ends) */
@@ -501,6 +608,12 @@ static void app_init_settings(void)
             clamp_sound(bank.p[k]);
     }
     got = plat_store_load(OBJ_SETTINGS, &set, sizeof set);
+    seq_ok = got == (int)sizeof set;
+    sq_on = sq_run = 0;
+    sq_need = 0;
+    rd.track = -1;
+    if (got == (int)SET_16_SIZE)                 /* (saved before the sequencer: the rest as it was) */
+        got = (int)sizeof set;
     if (got == (int)SET_OLD_SIZE)                /* (saved before the menu: its settings at their defaults) */
         cfg_defaults();
     if (got == (int)SET_08_SIZE) {               /* (16 parameters a synth then, 24 now: each row moved up, from the last) */
@@ -529,6 +642,18 @@ static void app_init_settings(void)
         cfg_defaults();
     if (set.synth > SYN_N)
         set.synth = 0;
+    if (!seq_ok || set.seq.n < 1u || set.seq.n > SQ_TRACKS || set.seq.bpm < 40u || set.seq.bpm > 240u)
+        seq_fresh();
+    for (t = 0; t < SQ_TRACKS; t++) {
+        if (set.seq.t[t].slot > NSLOTS)
+            set.seq.t[t].slot = 0;
+        if (set.seq.t[t].level > 100u)
+            set.seq.t[t].level = 100;
+        set.seq.t[t].mute = set.seq.t[t].mute ? 1 : 0;
+        for (k = 0; k < SQ_STEPS; k++)
+            if (set.seq.t[t].note[k] != SQ_OFF && (set.seq.t[t].note[k] < -SQ_NOTE_MAX || set.seq.t[t].note[k] > SQ_NOTE_MAX))
+                set.seq.t[t].note[k] = SQ_OFF;
+    }
     for (k = 0; k < SYN_SLOTS; k++) {
         if (k >= SYN_N) {
             set.srec[k] = set.ssel[k] = 0;
@@ -570,20 +695,26 @@ static float rd_fade(uint32_t j)                 /* SoundDSP.finish's fades: 220
 static float rd_shape(float v, uint32_t j)       /* a raw sample, finished: the mean out, then tanh and fades */
 {
     v = v - v == 0.0f ? v - rd.mean : 0.0f;      /* (not finite: 0, as bfxr2) */
-    return rd.w.raw ? fm_clampf(v, -1.0f, 1.0f) : fm_tanhf(v) * rd_fade(j);
+    if (rd.w.raw) {                              /* (its own level; a cut end faded) */
+        v = fm_clampf(v, -1.0f, 1.0f);
+        if (rd.full > rd.len && j + 220u >= rd.len)
+            v *= (float)(rd.len - 1u - j) * (1.0f / 220.0f);
+        return v;
+    }
+    return fm_tanhf(v) * rd_fade(j);
 }
 
 static float rd_raw(uint32_t j)                  /* the kept sound's sample j, before finishing */
 {
     if (rd.keep)
-        return (float)((const int16_t *)(const void *)sb_mem)[j] * (RD_KEEP_SCALE / 32767.0f);
+        return (float)((const int16_t *)(const void *)(sb_mem + rd.r0))[j] * (RD_KEEP_SCALE / 32767.0f);
     return sb_dec[sb_mem[rd.base + j]] * RD_KEEP_SCALE;
 }
 static void rd_put_raw(uint32_t j, float v)
 {
     v = fm_clampf(v, -RD_KEEP_SCALE, RD_KEEP_SCALE);
     if (rd.keep)
-        ((int16_t *)(void *)sb_mem)[j] = (int16_t)(v * (32767.0f / RD_KEEP_SCALE));
+        ((int16_t *)(void *)(sb_mem + rd.r0))[j] = (int16_t)(v * (32767.0f / RD_KEEP_SCALE));
     else
         sb_mem[rd.base + j] = mulaw(v * (1.0f / RD_KEEP_SCALE));
 }
@@ -658,7 +789,7 @@ static void rd_start(const syn_engine_t *e, const float *p, uint32_t cap, int ke
     rd.pos = 0;
     rd.sum = rd.comp = 0;
     rd.peak = 0;
-    rd.keep = keep < 0 ? rd.len * 2u <= SB_BYTES : (uint8_t)keep;
+    rd.keep = keep < 0 ? rd.len * 2u <= rd.rn : (uint8_t)keep;
     rd.base = base;
     rd.w = z;
     if (e->whole)
@@ -696,19 +827,19 @@ static void rd_mixr(void)                        /* Mixr: its first sound into t
     rd.L = lf > ls ? lf : ls;                    /* bfxr2: the longer one's length, 0.1 s at least */
     if (rd.L < 4410u)
         rd.L = 4410u;
-    if (rd.L > SB_LEN)
-        rd.L = SB_LEN;
+    if (rd.L > rd.cap)
+        rd.L = rd.cap;
     if (ws) {                                    /* both: the second kept raw at the buffer's end, both as bytes */
-        if (ls > SB_LEN / 2u)
-            ls = SB_LEN / 2u;
-        if (rd.L > SB_BYTES - ls)
-            rd.L = SB_BYTES - ls;
+        if (ls > rd.cap / 2u)
+            ls = rd.cap / 2u;
+        if (rd.L > rd.rn - ls)
+            rd.L = rd.rn - ls;
         rd.akeep = 0;
     } else
-        rd.akeep = rd.L * 2u <= SB_BYTES;
+        rd.akeep = rd.L * 2u <= rd.rn;
     rd.lsec = ls < rd.L ? ls : rd.L;
     rd.phase = 0;
-    rd_start(rd.seng[rd.first], rd.sp[rd.first], lf < rd.L ? lf : rd.L, rd.akeep, 0);
+    rd_start(rd.seng[rd.first], rd.sp[rd.first], lf < rd.L ? lf : rd.L, rd.akeep, rd.r0);
 }
 
 static float rd_slot_gain(uint32_t x)            /* Mixr: a sound's share, balance and volume (bfxr2: volume * 2) */
@@ -719,7 +850,8 @@ static float rd_slot_gain(uint32_t x)            /* Mixr: a sound's share, balan
 
 static float rd_mixed(uint32_t j)                /* Mixr: the first sound as kept (finished), at its level */
 {
-    float a = rd.akeep ? (float)((const int16_t *)(const void *)sb_mem)[j] * (1.0f / 32767.0f) : sb_dec[sb_mem[j]];
+    float a = rd.akeep ? (float)((const int16_t *)(const void *)(sb_mem + rd.r0))[j] * (1.0f / 32767.0f) :
+                         sb_dec[sb_mem[rd.r0 + j]];
     return a * rd.again;
 }
 static void rd_put_mixed(uint32_t j, float v)    /* ... and the mix in its place: clipped, the last 128 faded */
@@ -728,18 +860,27 @@ static void rd_put_mixed(uint32_t j, float v)    /* ... and the mix in its place
     if (j + 128u > rd.L)
         v *= (float)(rd.L - 1u - j) * (1.0f / 127.0f);
     if (rd.akeep)
-        ((int16_t *)(void *)sb_mem)[j] = (int16_t)(v * 32767.0f);
+        ((int16_t *)(void *)(sb_mem + rd.r0))[j] = (int16_t)(v * 32767.0f);
     else
-        sb_mem[j] = mulaw(v);
+        sb_mem[rd.r0 + j] = mulaw(v);
 }
 
 static void rd_ready(uint32_t len, int wide, float vol)
 {
     uint32_t i;
+    rd.state = RD_IDLE;
+    if (rd.track >= 0) {                         /* a sequencer track's sound */
+        sq_sound_t *q = &sq_sound[rd.track];
+        q->len = len;
+        q->wide = (uint8_t)wide;
+        q->vol = vol;
+        q->ready = 1;
+        rd.npend = 0;
+        return;
+    }
     sb_len = len;
     sb_wide = (uint8_t)wide;
     sb_vol = vol;
-    rd.state = RD_IDLE;
     sb_ready = 1;
     for (i = 0; i < rd.npend; i++)
         ring_push(rd.pend[i].st, rd.pend[i].mono);
@@ -757,11 +898,11 @@ static void rd_done(void)                        /* the sound is finished: it pl
     rd.again = rd_level() * rd_slot_gain(rd.first);
     for (i = rd.len; i < rd.L; i++)
         if (rd.akeep)
-            ((int16_t *)(void *)sb_mem)[i] = 0;
+            ((int16_t *)(void *)(sb_mem + rd.r0))[i] = 0;
         else
-            sb_mem[i] = mulaw(0.0f);
+            sb_mem[rd.r0 + i] = mulaw(0.0f);
     rd.phase = 1;
-    rd_start(rd.seng[!rd.first], rd.sp[!rd.first], rd.lsec, 0, SB_BYTES - rd.lsec);
+    rd_start(rd.seng[!rd.first], rd.sp[!rd.first], rd.lsec, 0, rd.r0 + rd.rn - rd.lsec);
 }
 
 /* main loop: render the preset synth's sound for up to budget_us */
@@ -769,6 +910,39 @@ static void rd_tick(uint32_t budget_us)
 {
     uint32_t t0 = plat_ticks24(), i;
     float blk[256];
+    if (sq_on) {                                 /* the sequencer: its tracks' sounds, one at a time */
+        if (rd.state == RD_IDLE && sq_need) {
+            uint32_t t = 0, k, sl;
+            if (bx_bfxr_on)
+                return;                          /* (a Bfxr voice still in the shared memory: the next frame) */
+            bx_mem_bfxr = 0;
+            while (!(sq_need >> t & 1u))
+                t++;
+            sq_need &= (uint8_t)~(1u << t);
+            sq_sound[t].ready = 0;
+            sl = set.seq.t[t].slot;
+            if (t < SQ_TRACKS && sl >= 1u && sl <= NSLOTS && (bank.used >> (sl - 1u) & 1u)) {
+                rd.track = (int8_t)t;
+                rd.r0 = t * SQ_REGION;
+                rd.rn = rd.cap = SQ_REGION;
+                rd.synth = bank.synth[sl - 1u];
+                rd.mix = rd.synth == MIXR_ID;
+                rd.phase = 0;
+                rd.npend = 0;
+                for (k = 0; k < SYN_MAXP; k++)
+                    rd.p[k] = bank.p[sl - 1u][k];
+                if (rd.mix)
+                    rd_mixr();
+                else if (rd.synth)
+                    rd_start(&SYN_ENGINES[rd.synth - 1u], rd.p, rd.cap, -1, rd.r0);
+                else {                           /* the classic Bfxr's: rendered too, at its own level */
+                    for (k = 0; k < BP_COUNT; k++)
+                        rd.sp[0][k] = bank.p[sl - 1u][k];
+                    rd_start(&BSRC, rd.sp[0], rd.cap, -1, rd.r0);
+                }
+            }
+        }
+    } else {
     if (rd.want && set.synth && bx_bfxr_on)
         return;                                  /* (a Bfxr voice still in the shared memory: the next frame) */
     if (rd.want && set.synth)
@@ -786,10 +960,16 @@ static void rd_tick(uint32_t budget_us)
         for (k = 0; k < SYN_MAXP; k++)
             rd.p[k] = set.sp[set.synth - 1u][k];
         rd.mix = rd.synth == MIXR_ID;
+        rd.track = -1;
+        rd.r0 = 0;
+        rd.rn = SB_BYTES;
+        rd.cap = SB_LEN;
+        rd.phase = 0;
         if (rd.mix)
             rd_mixr();
         else
             rd_start(&SYN_ENGINES[rd.synth - 1u], rd.p, SB_LEN, -1, 0);
+    }
     }
     while (rd.state != RD_IDLE && plat_ticks24() - t0 < budget_us * PLAT_TICKS_PER_US) {
         const syn_engine_t *e = rd.eng;
@@ -798,7 +978,7 @@ static void rd_tick(uint32_t budget_us)
             n = 256u;
         if (rd.state == RD_FINISH) {             /* the kept sound finished in place: 16 bits, or bytes */
             uint32_t m = rd.len - rd.pos > 4096u ? 4096u : rd.len - rd.pos;
-            int16_t *w16 = (int16_t *)(void *)sb_mem;
+            int16_t *w16 = ((int16_t *)(void *)(sb_mem + rd.r0));
             for (i = 0; i < m; i++) {
                 uint32_t j = rd.pos + i;
                 float x = rd_shape(rd_raw(j), j);
@@ -806,7 +986,7 @@ static void rd_tick(uint32_t budget_us)
                 if (rd.keep)
                     w16[j] = (int16_t)(x * 32767.0f);
                 else
-                    sb_mem[j] = mulaw(x);
+                    sb_mem[rd.r0 + j] = mulaw(x);
             }
             rd.pos += m;
             if (rd.pos >= rd.len)
@@ -901,7 +1081,7 @@ static void rd_tick(uint32_t budget_us)
                 rd.comp = (t - rd.sum) - y;
                 rd.sum = t;
                 if (rd.keep)
-                    ((int16_t *)(void *)sb_mem)[rd.pos + i] =
+                    ((int16_t *)(void *)(sb_mem + rd.r0))[rd.pos + i] =
                         (int16_t)(fm_clampf(v, -RD_KEEP_SCALE, RD_KEEP_SCALE) * (32767.0f / RD_KEEP_SCALE));
                 else if (rd.whole)
                     sb_mem[rd.base + rd.pos + i] = mulaw(v * (1.0f / RD_KEEP_SCALE));
@@ -942,7 +1122,7 @@ static void rd_tick(uint32_t budget_us)
                 uint32_t j = rd.pos + i;
                 float v = rd_shape(blk[i], j);
                 rd.peak = fm_maxf(rd.peak, fm_fabsf(v));
-                sb_mem[j] = mulaw(v);
+                sb_mem[rd.r0 + j] = mulaw(v);
             }
             rd.pos += n;
             if (rd.pos >= rd.len)
@@ -978,6 +1158,9 @@ static struct {
     uint8_t picker, pick;                /* ENV's synth menu is open; the synth picked (0: Bfxr) */
     uint8_t sel_eaten;                   /* SEL opened a synth: not the slots until it is let go */
     uint8_t rendering;                   /* as last drawn */
+    uint8_t sq_cur, sq_seen, sq_selup;   /* the sequencer: the step on screen, the step last drawn as playing, SEL
+                                            used with a key (no step toggled as it is let go) */
+    int8_t sq_last;                      /* the pitch last put in a step (SEL puts it again) */
     uint8_t redraw;
 } ui;
 static syn_rng_t gen_rng = {0x9E3779B9u};
@@ -1593,6 +1776,345 @@ static void menu_close(void)
 }
 
 /* ------------------------------------------------------------ ENV: the synths --- */
+/* ------------------------------------------------------------ the sequencer --- */
+/* SEQ opens it (SEQ or HOME leaves). One track to start with; EDIT adds one (to SQ_TRACKS), SAVE + FX takes the track
+ * on screen away. PRESET picks the track, SELECT the step.
+ *   K1              the track's sound: one of the saved slots (SEL + a white key: that slot)
+ *   SEL             the step on or off;  K2 its pitch;  a key puts its note in the step and moves on
+ *   K3              the tempo;  K4 the track's level;  FX mutes the track
+ *   PLAY            starts and stops the pattern;  SAVE keeps it */
+static void slot_text(uint32_t sl, char *t)     /* "3 WHOOSHR" */
+{
+    int_text((int32_t)sl, t);
+    text_cat(t, " ");
+    text_cat(t, bank.synth[sl - 1u] ? SYN_INFO[bank.synth[sl - 1u] - 1u].name : "BFXR");
+}
+
+static void seq_render(uint32_t t)               /* a track's sound changed: rendered again */
+{
+    if (rd.track == (int8_t)t)
+        rd.state = RD_IDLE;
+    sq_sound[t].ready = 0;
+    sq_need |= (uint8_t)(1u << t);
+}
+
+static void seq_say_track(void)
+{
+    char a[12] = "TRACK ", b[24];
+    uint32_t sl = set.seq.t[sq_sel].slot;
+    a[6] = (char)('1' + sq_sel);
+    a[7] = 0;
+    if (sl)
+        slot_text(sl, b);
+    else {
+        b[0] = 0;
+        text_cat(b, "NO SOUND");
+    }
+    app_say(a, b);
+}
+
+static void seq_set_slot(uint32_t t, uint32_t sl)   /* sl: 1 .. NSLOTS, holding a sound */
+{
+    set.seq.t[t].slot = (uint8_t)sl;
+    set_dirty = 1;
+    seq_render(t);
+}
+
+static uint32_t seq_first_slot(void)            /* the first slot holding a sound (0: none) */
+{
+    uint32_t i;
+    for (i = 0; i < NSLOTS; i++)
+        if (bank.used >> i & 1u)
+            return i + 1u;
+    return 0;
+}
+
+static void seq_open(void)
+{
+    uint32_t t;
+    app_panic();
+    ui.picker = 0;
+    rd.state = RD_IDLE;                          /* (the buffer is the tracks' now) */
+    rd.npend = 0;
+    sb_ready = 0;
+    sq_run = 0;
+    sq_need = 0;
+    for (t = 0; t < SQ_TRACKS; t++) {
+        uint32_t sl = set.seq.t[t].slot;
+        sq_sound[t].ready = 0;
+        if (sl && !(bank.used >> (sl - 1u) & 1u))    /* (its slot was cleared) */
+            set.seq.t[t].slot = 0;
+        if (t < set.seq.n && !set.seq.t[t].slot)
+            set.seq.t[t].slot = (uint8_t)seq_first_slot();
+        if (t < set.seq.n && set.seq.t[t].slot)
+            sq_need |= (uint8_t)(1u << t);
+    }
+    if (sq_sel >= set.seq.n)
+        sq_sel = 0;
+    sq_on = 1;
+    ui.redraw = 1;
+    if (seq_first_slot())
+        app_say("SEQUENCER", "");
+    else
+        app_say("NO SAVED SOUNDS", "SAVE + KEY");
+}
+
+static void seq_close(void)
+{
+    uint32_t t;
+    sq_run = 0;
+    sq_on = 0;
+    for (t = 0; t < SQ_TRACKS; t++)
+        sq_sound[t].ready = 0;
+    app_panic();
+    sq_need = 0;
+    rd.state = RD_IDLE;
+    rd.track = -1;
+    rd.want = 1;                                 /* the sound on screen: rendered again */
+    sb_ready = 0;
+    ui.redraw = 1;
+    app_say(set.synth ? SYN_INFO[set.synth - 1u].name : "BFXR", "");
+}
+
+static void seq_step_say(void)
+{
+    char a[12] = "STEP ", b[8];
+    int32_t nt = set.seq.t[sq_sel].note[ui.sq_cur];
+    int_text((int32_t)ui.sq_cur + 1, a + 5);
+    b[0] = 0;
+    if (nt == SQ_OFF)
+        text_cat(b, "OFF");
+    else {
+        if (nt > 0)
+            text_cat(b, "+");
+        int_text(nt, b + (nt > 0 ? 1 : 0));
+    }
+    app_say(a, b);
+}
+
+static void seq_put(int32_t nt, int play)        /* the step on screen: a pitch (SQ_OFF: off) */
+{
+    if (nt != SQ_OFF) {
+        nt = clamp(nt, -SQ_NOTE_MAX, SQ_NOTE_MAX);
+        ui.sq_last = (int8_t)nt;
+    }
+    set.seq.t[sq_sel].note[ui.sq_cur] = (int8_t)nt;
+    set_dirty = 1;
+    seq_step_say();
+    if (play && nt != SQ_OFF && !sq_run)
+        ring_push(nt, 1);
+}
+
+static void seq_input(uint32_t keys, uint32_t btn)
+{
+    uint32_t k;
+    int32_t e;
+    for (k = 0; k < NKEYS; k++) {
+        uint32_t bit = 1u << k;
+        if (!(keys & bit) || (ui.keys & bit))
+            continue;
+        if (btn >> B_SEL & 1u) {                 /* SEL + a white key: that slot's sound on the track */
+            int32_t i = key_slot(k);
+            ui.sq_selup = 1;
+            if (i >= 0 && (bank.used >> i & 1u)) {
+                seq_set_slot(sq_sel, (uint32_t)i + 1u);
+                seq_say_track();
+            } else if (i >= 0)
+                app_say("SLOT EMPTY", "");
+        } else {                                 /* a key: its note in the step, and on to the next */
+            seq_put(53 + (int32_t)k + 12 * set.octave - 60, 1);
+            ui.sq_cur = (uint8_t)((ui.sq_cur + 1u) % SQ_STEPS);
+        }
+        ui.redraw = 1;
+    }
+    for (k = 0; k < NB; k++) {
+        uint32_t bit = 1u << k;
+        if (!(btn & bit) || (ui.btn & bit))
+            continue;
+        ui.redraw = 1;
+        if (k == B_SEQ || k == B_HOME) {
+            seq_close();
+            return;
+        } else if (k == B_PLAY) {
+            if (sq_run)
+                sq_run = 0;
+            else {
+                sq_step = 0;
+                sq_left = 0;
+                sq_run = 1;
+            }
+            app_say(sq_run ? "PLAY" : "STOP", "");
+        } else if (k == B_SEL)
+            ui.sq_selup = 0;                     /* (it acts as it is let go: a key may pick a slot meanwhile) */
+        else if (k == B_SAVE)
+            ui.save_used = 0;
+        else if (k == B_EDIT) {                  /* another track */
+            if (set.seq.n >= SQ_TRACKS)
+                app_say("4 TRACKS", "FULL");
+            else {
+                uint32_t t = set.seq.n, q;
+                set.seq.t[t].slot = set.seq.t[sq_sel].slot;
+                set.seq.t[t].level = 100;
+                set.seq.t[t].mute = 0;
+                for (q = 0; q < SQ_STEPS; q++)
+                    set.seq.t[t].note[q] = SQ_OFF;
+                set.seq.n = (uint8_t)(t + 1u);
+                sq_sel = (uint8_t)t;
+                ui.sq_cur = 0;
+                set_dirty = 1;
+                if (set.seq.t[t].slot)
+                    seq_render(t);
+                app_say("TRACK ADDED", "");
+            }
+        } else if (k == B_FX && (btn >> B_SAVE & 1u)) {   /* SAVE + FX: the track goes (the ones after move up) */
+            ui.save_used = 1;
+            if (set.seq.n <= 1u)
+                app_say("LAST TRACK", "");
+            else {
+                uint32_t t;
+                for (t = sq_sel; t + 1u < set.seq.n; t++)
+                    set.seq.t[t] = set.seq.t[t + 1u];
+                set.seq.n--;
+                for (t = 0; t < SQ_TRACKS; t++) {    /* (their sounds: each back in its own region) */
+                    sq_sound[t].ready = 0;
+                    if (t < set.seq.n && set.seq.t[t].slot)
+                        sq_need |= (uint8_t)(1u << t);
+                }
+                rd.state = RD_IDLE;
+                if (sq_sel >= set.seq.n)
+                    sq_sel = (uint8_t)(set.seq.n - 1u);
+                set_dirty = 1;
+                app_say("TRACK REMOVED", "");
+            }
+        } else if (k == B_FX) {
+            set.seq.t[sq_sel].mute ^= 1u;
+            set_dirty = 1;
+            app_say(set.seq.t[sq_sel].mute ? "MUTED" : "UNMUTED", "");
+        } else if (k == B_OCTDN)
+            octave_step(-1);
+        else if (k == B_OCTUP)
+            octave_step(1);
+    }
+    if (!(btn >> B_SEL & 1u) && (ui.btn >> B_SEL & 1u) && !ui.sq_selup) {   /* SEL tapped: the step on or off */
+        seq_put(set.seq.t[sq_sel].note[ui.sq_cur] == SQ_OFF ? ui.sq_last : SQ_OFF, 1);
+        ui.redraw = 1;
+    }
+    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_used) {   /* SAVE tapped: the pattern kept */
+        if (plat_store_save(OBJ_SETTINGS, &set, sizeof set) == 0) {
+            set_dirty = 0;
+            app_say("SAVED", "");
+        } else
+            app_say("SAVE", "FAILED");
+    }
+    for (k = 0; k < NE; k++) {
+        if ((e = plat_enc((int)k)) == 0)
+            continue;
+        ui.redraw = 1;
+        if (k == EN_SELECT) {
+            ui.sq_cur = (uint8_t)(((int32_t)ui.sq_cur + e % 16 + 16) % 16);
+            seq_step_say();
+        } else if (k == EN_PRESET) {
+            sq_sel = (uint8_t)clamp((int32_t)sq_sel + e, 0, (int32_t)set.seq.n - 1);
+            seq_say_track();
+        } else if (k == EN_K1) {                 /* the next slot holding a sound, that way */
+            int32_t sl = set.seq.t[sq_sel].slot, d = e > 0 ? 1 : -1, n;
+            for (n = e < 0 ? -e : e; n > 0; n--) {
+                int32_t q = sl + d;
+                while (q >= 1 && q <= (int32_t)NSLOTS && !(bank.used >> (q - 1) & 1u))
+                    q += d;
+                if (q < 1 || q > (int32_t)NSLOTS)
+                    break;
+                sl = q;
+            }
+            if (sl && sl != set.seq.t[sq_sel].slot)
+                seq_set_slot(sq_sel, (uint32_t)sl);
+            seq_say_track();
+        } else if (k == EN_K2 || k == EN_ALGO) {
+            int32_t nt = set.seq.t[sq_sel].note[ui.sq_cur];
+            seq_put(nt == SQ_OFF ? ui.sq_last : nt + e, 0);
+        } else if (k == EN_K3) {
+            char b[8];
+            set.seq.bpm = (uint8_t)clamp((int32_t)set.seq.bpm + e, 40, 240);
+            set_dirty = 1;
+            int_text(set.seq.bpm, b);
+            app_say("TEMPO", b);
+        } else if (k == EN_K4) {
+            char b[8];
+            set.seq.t[sq_sel].level = (uint8_t)clamp((int32_t)set.seq.t[sq_sel].level + e * 5, 0, 100);
+            set_dirty = 1;
+            int_text(set.seq.t[sq_sel].level, b);
+            app_say("LEVEL", b);
+        }
+    }
+}
+
+static void seq_draw(void)
+{
+    char t[32];
+    uint32_t tr, k, now = plat_ms();
+    cv_begin(240, 240, K_BG);
+    cv_rect(0, 0, 240, 30, K_BAR);
+    cv_text(10, 5, &FONT_B, "SEQ", K_BG);
+    int_text(set.seq.bpm, t);
+    text_cat(t, " BPM");
+    cv_text(236 - text_w(&FONT_XS, t), 4, &FONT_XS, t, K_BG);
+    if (ui.rendering)
+        cv_text(236 - text_w(&FONT_XS, "MAKING"), 16, &FONT_XS, "MAKING", K_BG);
+    else if (sq_run)
+        cv_text(236 - text_w(&FONT_XS, "PLAYING"), 16, &FONT_XS, "PLAYING", K_BG);
+    for (tr = 0; tr < SQ_TRACKS; tr++) {
+        int32_t y = 34 + (int32_t)tr * 45;
+        int sel = tr == sq_sel;
+        if (tr >= set.seq.n) {
+            if (tr == set.seq.n)
+                cv_text(8, y + 14, &FONT_XS, "EDIT ADDS A TRACK", K_SOFT);
+            continue;
+        }
+        if (sel)
+            cv_rect(0, y, 240, 43, K_ROW);
+        cv_rect(3, y + 3, 12, 12, sel ? K_BAR : K_TRACK);
+        t[0] = (char)('1' + tr);
+        t[1] = 0;
+        cv_text(9 - text_w(&FONT_XS, t) / 2, y + 3, &FONT_XS, t, sel ? K_BG : K_LABEL);
+        if (set.seq.t[tr].slot)
+            slot_text(set.seq.t[tr].slot, t);
+        else {
+            t[0] = 0;
+            text_cat(t, "NO SOUND");
+        }
+        cv_text(20, y + 3, &FONT_XS, t, sel ? K_INK : K_LABEL);
+        t[0] = 0;
+        if (set.seq.t[tr].mute)
+            text_cat(t, "MUTE");
+        else if (set.seq.t[tr].slot && !sq_sound[tr].ready)
+            text_cat(t, "...");
+        else {
+            int_text(set.seq.t[tr].level, t);
+            text_cat(t, "%");
+        }
+        cv_text(236 - text_w(&FONT_XS, t), y + 3, &FONT_XS, t, K_SOFT);
+        for (k = 0; k < SQ_STEPS; k++) {         /* the steps: on (taller the higher its pitch), the beats marked */
+            int32_t x = 8 + (int32_t)k * 14, nt = set.seq.t[tr].note[k];
+            if (sel && k == ui.sq_cur)
+                cv_rect(x - 1, y + 18, 14, 22, K_INK);
+            cv_rect(x, y + 19, 12, 20, k % 4u == 0 ? K_SOFT : K_TRACK);
+            if (nt != SQ_OFF) {
+                int32_t h = 10 + (nt + SQ_NOTE_MAX) * 10 / (2 * SQ_NOTE_MAX);
+                cv_rect(x + 1, y + 39 - h - 1, 10, h, set.seq.t[tr].mute ? K_LABEL : K_BAR);
+            }
+            if (sq_run && k == sq_now)
+                cv_rect(x, y + 40, 12, 2, K_INK);
+        }
+    }
+    cv_rect(0, 216, 240, 1, K_SOFT);
+    if (now < ui.msg_until) {
+        int32_t x = cv_text(8, 222, &FONT_XS, ui.msg[0], K_INK);
+        cv_text(x + 8, 222, &FONT_XS, ui.msg[1], K_BAR);
+    } else
+        cv_text(8, 222, &FONT_XS, "SEL STEP  EDIT +TRACK  FX MUTE", K_SOFT);
+    cv_blit(0, 0);
+}
+
 /* ENV opens the synth menu, the website's tabs as a grid: SELECT (or PRESET) picks, SEL or ENV opens it, HOME goes
  * back. Each synth keeps its own sound (settings_t.sp). */
 static const char *synth_name(uint32_t i) { return i ? SYN_INFO[i - 1u].name : "BFXR"; }
@@ -1621,6 +2143,10 @@ static void input(void)
 {
     uint32_t keys = plat_keys(), btn = plat_buttons(), k;
     int32_t e;
+    if (sq_on) {                                 /* the sequencer's screen */
+        seq_input(keys, btn);
+        goto done;
+    }
     for (k = 0; k < NKEYS; k++) {                /* key 0 is F3 (MIDI 53); C4 plays the sound as made */
         uint32_t bit = 1u << k;
         if ((keys & bit) && !(ui.keys & bit) && !ui.menu && !ui.picker && !ui.sel_eaten &&
@@ -1644,6 +2170,10 @@ static void input(void)
         uint32_t bit = 1u << k;
         if (!(btn & bit) || (ui.btn & bit))
             continue;
+        if (k == B_SEQ && !ui.menu) {            /* the sequencer */
+            seq_open();
+            goto done;
+        }
         if (k == B_ENV && !ui.menu) {            /* the synth menu */
             if (ui.picker)
                 synth_open(ui.pick);
@@ -1780,13 +2310,14 @@ static void input(void)
         if (set.play_on_change)
             play_now();
     }
+done:
     if (keys != ui.keys || btn != ui.btn)
         ui.redraw = 1;
     ui.keys = keys;
     ui.btn = btn;
     plat_glow(1);
     plat_leds(btn | (set_dirty ? 1u << B_SAVE : 0u) | (bx_playing ? LED_PLAY_GREEN : 0u) | (ui.menu ? 1u << B_GLO : 0u) |
-              (ui.picker || set.synth ? 1u << B_ENV : 0u),
+              (ui.picker || set.synth ? 1u << B_ENV : 0u) | (sq_on ? 1u << B_SEQ : 0u),
               (btn & (1u << B_SAVE | 1u << B_SEL)) ? slot_keys() | keys : keys);   /* SAVE / SEL held: the slots */
 }
 
@@ -1880,6 +2411,10 @@ static void draw(void)
 {
     char t[32];
     uint32_t r, now = plat_ms(), np = cur_np(), sel = *cur_sel();
+    if (sq_on) {
+        seq_draw();
+        return;
+    }
     int32_t top = clamp((int32_t)sel - 2, 0, np > ROWS ? (int32_t)np - ROWS : 0);
     const char *kind = set.synth ? recipe_name() : BFXR_GEN_NAMES[set.gen];
     cv_begin(240, 240, K_BG);
@@ -2036,8 +2571,15 @@ void app_frame(void)
     rd_tick(20000u);                             /* a preset synth's sound: 20 ms of rendering a frame */
     bsx_pump();
     speak();
-    if (ui.rendering != (rd.want || rd.state != RD_IDLE)) {
-        ui.rendering = rd.want || rd.state != RD_IDLE;
+    {
+        uint8_t busy = sq_on ? sq_need || rd.state != RD_IDLE : rd.want || rd.state != RD_IDLE;
+        if (ui.rendering != busy) {
+            ui.rendering = busy;
+            ui.redraw = 1;
+        }
+    }
+    if (sq_on && sq_run && ui.sq_seen != sq_now) {   /* the step playing moves */
+        ui.sq_seen = sq_now;
         ui.redraw = 1;
     }
     if (ui.playing != bx_playing) {
@@ -2104,6 +2646,26 @@ int app_expect(const char *what, int *got)
         *got = ui.picker ? 1 + ui.pick : 0;
     else if (!strcmp(what, "recipe"))
         *got = set.synth && set.srec[set.synth - 1u] != SREC_NONE ? set.srec[set.synth - 1u] : -1;
+    else if (!strcmp(what, "seq"))               /* the sequencer: open */
+        *got = sq_on;
+    else if (!strcmp(what, "seqrun"))
+        *got = sq_run;
+    else if (!strcmp(what, "seqtracks"))
+        *got = set.seq.n;
+    else if (!strcmp(what, "seqtrack"))
+        *got = sq_sel;
+    else if (!strcmp(what, "seqstep"))           /* the step on screen */
+        *got = ui.sq_cur;
+    else if (!strcmp(what, "seqnote"))           /* its pitch (-128: off) */
+        *got = set.seq.t[sq_sel].note[ui.sq_cur];
+    else if (!strcmp(what, "seqslot"))
+        *got = set.seq.t[sq_sel].slot;
+    else if (!strcmp(what, "seqready"))          /* the tracks whose sound is rendered, a bit each */
+        *got = (int)(sq_sound[0].ready | sq_sound[1].ready << 1 | sq_sound[2].ready << 2 | sq_sound[3].ready << 3);
+    else if (!strcmp(what, "seqlen"))            /* the track's sound in ms */
+        *got = (int)(sq_sound[sq_sel].len / 44u);
+    else if (!strcmp(what, "bpm"))
+        *got = set.seq.bpm;
     else if (!strcmp(what, "ready"))             /* the preset synth's sound is rendered */
         *got = sb_ready;
     else if (!strcmp(what, "sbdump")) {          /* (debugging: the buffer to sbdump.raw) */

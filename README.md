@@ -162,6 +162,36 @@ switch off.
 
 ![Holding SAVE: the 16 slots](docs/slots.png)
 
+## The sequencer (SEQ)
+
+**SEQ** opens a small step sequencer that plays your saved sounds as a pattern: up to 4 tracks, each one of your
+slots' sounds, 16 steps to a bar, a pitch for every step. **SEQ** or **HOME** goes back to the sound.
+
+![The sequencer: two tracks, the pattern playing](docs/seq.png)
+
+It starts with one track. Store a sound in a slot first (**SAVE** + a white key); the track takes it.
+
+| Control | In the sequencer |
+|---|---|
+| **EDIT** | Add a track (4 at most). **SAVE + FX** takes the track on screen away |
+| **PRESET** | Pick the track |
+| **K1** | The track's sound: steps through the slots that hold one. **SEL** + a white key picks that slot |
+| **SELECT** | Pick the step |
+| **SEL** | The step on or off |
+| A key | Puts its note in the step and moves to the next: play a tune in, a step a key |
+| **K2** (or ALGO) | The step's pitch, in semitones from the sound as made |
+| **K3** | The tempo, 40 to 240 BPM |
+| **K4** | The track's level. **FX** mutes it |
+| **PLAY** | Start and stop the pattern |
+| **SAVE** | Keep the pattern (it is back at the next power-on) |
+
+A step that is on shows as a block, taller the higher its pitch; the line under the steps is where the pattern is.
+
+Each track has room for 1.25 seconds of sound (0.6 s for some Mixr sounds); a longer one is cut there with a fade.
+When you open the sequencer, or give a track another sound, the FM-1 makes the tracks' sounds first (MAKING, and
+`...` on the track), and a track plays once its sound is made. A track plays one note at a time: a new step cuts
+the last one's tail. If you store a new sound in a slot a track uses, the track has it the next time you open SEQ.
+
 ## Your sounds on your computer: the Library
 
 The **[Library](https://nickhelliot.github.io/Bfm-1xr/library/)** page reads the slots from the FM-1 over USB.
